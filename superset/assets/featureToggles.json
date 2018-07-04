@@ -1,0 +1,7 @@
+{
+  "security_listUsers": {
+    "show": true,
+    "version": "v1"
+  },
+  "security_listRoles": {}
+}
