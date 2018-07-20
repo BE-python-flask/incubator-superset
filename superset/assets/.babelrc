@@ -1,3 +1,48 @@
 {
-  "presets" : ["airbnb"],
+  "presets": [
+    "airbnb", [
+      "env",
+      {
+        "targets": {
+          "browsers": [
+            "ie >= 11"
+          ]
+        },
+        "exclude": [
+          "transform-async-to-generator",
+          "transform-regenerator"
+        ],
+        "modules": false,
+        "loose": true
+      }
+    ],
+    "react",
+    "stage-0"
+  ],
+  "plugins": [
+    "syntax-dynamic-import",
+    "transform-object-rest-spread",
+    "transform-export-extensions",
+    "transform-decorators-legacy",
+    "transform-class-properties", ["import", {
+      libraryName: "antd",
+      style: "css"
+    }],
+    ["transform-runtime", {
+      "polyfill": false,
+      "regenerator": true
+    }]
+  ],
+  "env": {
+    "commonjs": {
+      "presets": [
+        [
+          "env",
+          {
+            "loose": true
+          }
+        ]
+      ]
+    }
+  }
 }

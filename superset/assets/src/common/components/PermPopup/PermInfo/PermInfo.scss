@@ -1,0 +1,13 @@
+
+.perm-info {
+    width: 100%;
+}
+
+.perm-info .info-item {
+    width: calc(100% - 40px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 2px 20px;
+    font-size: 12px;
+}

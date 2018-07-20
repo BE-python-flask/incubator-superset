@@ -1,0 +1,59 @@
+{
+  "DATABASE": {
+    "INCEPTOR_CONNECTION": "Inceptor 连接",
+    "CONNECTION": "连接",
+    "RECORD": "记录",
+    "SEARCH": "搜索",
+    "DELETE": "删除",
+    "EDIT": "编辑",
+    "GRANT_PERM": "赋权",
+    "CONFIRM": "确定",
+    "PLEASE_SELECT": "请选择",
+    "NAME": "名称",
+    "CONN_TYPE": "连接类型",
+    "OWNER": "所有者",
+    "OPERATION": "操作",
+    "UPDATE_TIME": "更新时间",
+    "NO_SELECT_DELETE_TIP": "没有选择任何将要删除的记录，请选择！",
+    "ADD": "添加",
+    "CONN_NAME": "名称",
+    "DESCRIPTION": "描述",
+    "CONN_URI": "连接串",
+    "CONN_PARAMS": "参数",
+    "HTTPFS_ADDRESS": "httpfs地址",
+    "CREATOR": "创建者",
+    "DEFAULT": "默认",
+    "TEST_CONN": "测试连接",
+    "MODIFIER": "修改者",
+    "CREATE_DATE": "创建日期",
+    "MODIFY_TIME": "修改时间",
+    "DELETE_CONN": "删除连接",
+    "CONN_GRAMMAR_ERROR": "连接参数语法错误",
+    "CONN_IS_ILLEGAL": "该连接是一个合法连接",
+    "CONN_IS_UNILLEGAL": "该连接是一个不合法连接",
+
+    "HDFS_HTTPFS": "HDFS httpf服务IP地址",
+    "HDFS_DEFAULTINCCONNECT": "如果HDFS数据集没有选择Inceptor连接，则将使用该Inceptor连接。",
+    "HDFS_STR": "",
+    "HDFS_ARGS": "",
+
+    "INCEPTOR_STR": "如果认证方式是LDAP，需要加上用户名和密码",
+    "INCEPTOR_ARGS": "ODBC连接串的参数。（1）keytab文件通过Guardian获取；（2）支持LDAP认证，连接串需要添加用户名和密码",
+    "INCEPTOR_HTTPFS": "",
+    "INCEPTOR_DEFAULTINCCONNECT": "",
+
+    "MYSQL_STR": "参数’charset=utf8’是必须的",
+    "MYSQL_HTTPFS": "",
+    "MYSQL_DEFAULTINCCONNECT": "",
+
+    "ORACLE_STR": "",
+    "ORACLE_HTTPFS": "",
+    "ORACLE_DEFAULTINCCONNECT": "",
+
+    "MSSQL_STR": "",
+    "MSSQL_HTTPFS": "",
+    "MSSQL_DEFAULTINCCONNECT": "",
+
+    "NO_NEED_CONN_PARAMS": "不再需要修改连接参数"
+  }
+}

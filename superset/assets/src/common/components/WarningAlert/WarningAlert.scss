@@ -1,0 +1,59 @@
+$warning-color: #ffbf00;
+
+.warning-alert {
+    margin: 20px;
+    padding: 10px;
+    min-height: 100px;
+    display: flex;
+    justify-content: flex-start;
+    background-color: #fffaeb;
+
+    .warning-sign {
+        width: 76px;
+    }
+
+    .sign-container {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        left: 15px;
+        border-radius: 18px;
+        border: 2px solid $warning-color;
+
+        .symbol {
+            position: absolute;
+            left: 50%;
+            transform: translate(-1px);
+            top: 6px;
+
+            .vertical-line {
+                height: 16px;
+                width: 2px;
+                background-color: $warning-color;
+            }
+
+            .dot {
+                position: relative;
+                height: 3px;
+                width: 3px;
+                top: 3px;
+                border-radius: 1px;
+                background-color: $warning-color;
+            }
+
+        }
+    }
+    .warning-content {
+        flex: 1;
+        h5 {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        pre {
+            color: rgba(0, 0, 0, 0.65);
+            background: transparent;
+            white-space: pre-line;
+        }
+    }
+}

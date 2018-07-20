@@ -17,6 +17,8 @@ const config = {
   entry: {
     theme: APP_DIR + '/src/theme.js',
     common: APP_DIR + '/src/common.js',
+    home: APP_DIR + '/src/home.jsx',
+
     addSlice: ['babel-polyfill', APP_DIR + '/src/addSlice/index.jsx'],
     explore: ['babel-polyfill', APP_DIR + '/src/explore/index.jsx'],
     dashboard: ['babel-polyfill', APP_DIR + '/src/dashboard/index.jsx'],
@@ -41,8 +43,7 @@ const config = {
 
   },
   module: {
-    rules: [
-      {
+    rules: [{
         test: /datatables\.net.*/,
         loader: 'imports-loader?define=>false',
       },
@@ -75,6 +76,13 @@ const config = {
         loader: ExtractTextPlugin.extract({
           use: ['css-loader', 'less-loader'],
           fallback: 'style-loader',
+        }),
+      },
+      {
+        test: /\.s?[ac]ss$/,
+        include: APP_DIR,
+        loader: ExtractTextPlugin.extract({
+          use: ['style-loader', 'css-loader', 'sass-loader']
         }),
       },
       /* for css linking images */

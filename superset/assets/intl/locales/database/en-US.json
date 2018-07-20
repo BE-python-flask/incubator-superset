@@ -1,0 +1,59 @@
+{
+  "DATABASE": {
+    "INCEPTOR_CONNECTION": "Inceptor Connection",
+    "CONNECTION": "Connection",
+    "RECORD": "Record",
+    "SEARCH": "Search",
+    "DELETE": "Delete",
+    "EDIT": "Edit",
+    "GRANT_PERM": "Grant Perm",
+    "CONFIRM": "Confirm",
+    "PLEASE_SELECT": "Please Select",
+    "NAME": "Name",
+    "CONN_TYPE": "Type",
+    "OWNER": "Owner",
+    "OPERATION": "Operation",
+    "UPDATE_TIME": "Update Time",
+    "NO_SELECT_DELETE_TIP": "No select delete record, please select!",
+    "ADD": "Add",
+    "CONN_NAME": "Name",
+    "DESCRIPTION": "Description",
+    "CONN_URI": "Uri",
+    "CONN_PARAMS": "Params",
+    "HTTPFS_ADDRESS": "Httpfs Address",
+    "CREATOR": "Creator",
+    "DEFAULT": "Default",
+    "TEST_CONN": "Test Connection",
+    "MODIFIER": "Modifier",
+    "CREATE_DATE": "Create Date",
+    "MODIFY_TIME": "Modify Time",
+    "DELETE_CONN": "Delete Connection",
+    "CONN_GRAMMAR_ERROR": "Connection params grammar error",
+    "CONN_IS_ILLEGAL": "This connection is illegal",
+    "CONN_IS_UNILLEGAL": "This connection is unillegal",
+
+    "HDFS_HTTPFS": "HDFS http server ip",
+    "HDFS_DEFAULTINCCONNECT": "If havn't selected Inceptor connection，then would use current Inceptor connection。",
+    "HDFS_STR": "",
+    "HDFS_ARGS": "",
+
+    "INCEPTOR_STR": "If it's LDAP，need to add account info",
+    "INCEPTOR_ARGS": "ODBC connection params: （1）Get keytab from Guardian；（2）LDAP certification compatible，dataset must have account info",
+    "INCEPTOR_HTTPFS": "",
+    "INCEPTOR_DEFAULTINCCONNECT": "",
+
+    "MYSQL_STR": "Param ’charset=utf8’ is required",
+    "MYSQL_HTTPFS": "",
+    "MYSQL_DEFAULTINCCONNECT": "",
+
+    "ORACLE_STR": "",
+    "ORACLE_HTTPFS": "",
+    "ORACLE_DEFAULTINCCONNECT": "",
+
+    "MSSQL_STR": "",
+    "MSSQL_HTTPFS": "",
+    "MSSQL_DEFAULTINCCONNECT": "",
+
+    "NO_NEED_CONN_PARAMS": "No need connection params"
+  }
+}

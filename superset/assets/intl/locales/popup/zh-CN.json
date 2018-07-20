@@ -1,0 +1,14 @@
+{
+  "POPUP": {
+    "PERM_GRANT": "权限设置",
+    "USER_NAME": "用户名",
+    "CONFIG_PERM": "配置权限",
+    "CONFIG_SUCCESS": "配置成功",
+    "PLEASE_SELECT": "请选择",
+    "PERM": "权限",
+    "OPERATION": "操作",
+    "CONFIRM": "确定",
+    "CLICK_SHOW_GRANT_INFO": "点击显示赋权信息",
+    "CLICK_HIDE_GRANT_INFO": "点击隐藏赋权信息"
+  }
+}

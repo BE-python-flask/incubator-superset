@@ -1,0 +1,14 @@
+{
+  "POPUP": {
+    "PERM_GRANT": "Permission",
+    "USER_NAME": "Username",
+    "CONFIG_PERM": "Config Perm",
+    "CONFIG_SUCCESS": "Config Success",
+    "PLEASE_SELECT": "Please Select",
+    "PERM": "Permission",
+    "OPERATION": "Operation",
+    "CONFIRM": "Confirm",
+    "CLICK_SHOW_GRANT_INFO": "Click to show grant info",
+    "CLICK_HIDE_GRANT_INFO": "Click to hide grant info"
+  }
+}
