@@ -18,8 +18,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship, subqueryload
 from sqlalchemy.orm.session import make_transient
+from urllib import parse
 
-from superset import app, db
+from superset import app, db, sm
 from superset.message import DUPLICATE_NAME
 from superset.exception import ParameterException, PropertyException
 from .base import AuditMixinNullable, ImportMixin
@@ -34,6 +35,13 @@ dashboard_slices = Table(
     Column('id', Integer, primary_key=True),
     Column('dashboard_id', Integer, ForeignKey('dashboards.id')),
     Column('slice_id', Integer, ForeignKey('slices.id')),
+)
+
+dashboard_user = Table(
+    'dashboard_user', Model.metadata,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', Integer, ForeignKey('ab_user.id')),
+    Column('dashboard_id', Integer, ForeignKey('dashboards.id')),
 )
 
 
@@ -58,6 +66,7 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
     type = Column(String(12), default='dashboard')  # values in ['dashboard', 'folder']
     path = Column(String(128))
     slices = relationship('Slice', secondary=dashboard_slices, backref='dashboards')
+    owners = relationship(sm.user_model, secondary=dashboard_user)
 
     __table_args__ = (
         UniqueConstraint('name', name='dashboard_title_uc'),
@@ -89,10 +98,10 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
         elif not self.path:
             return [self.model_type.upper(), self.name]
         else:
-            folder = db.session.query(Dashboard)\
+            folder = db.session.query(Dashboard) \
                 .filter(Dashboard.id == self.path,
                         Dashboard.type == Dashboard.data_types[1]
-                ).first()
+                        ).first()
             if not folder:
                 logging.exception('Not existed dashboard(folder) with id={}'
                                   .format(self.path))
@@ -102,7 +111,15 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
 
     @property
     def url(self):
-        return "/p/dashboard/{}/".format(self.id)
+        if self.json_metadata:
+            # add default_filters to the preselect_filters of dashboard
+            json_metadata = json.loads(self.json_metadata)
+            default_filters = json_metadata.get('default_filters')
+            if default_filters:
+                filters = parse.quote(default_filters.encode('utf8'))
+                return '/p/dashboard/{}/?preselect_filters={}'.format(
+                    self.slug or self.id, filters)
+        return '/p/dashboard/{}/'.format(self.id)
 
     @property
     def datasources(self):
@@ -110,6 +127,7 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
 
     @property
     def sqla_metadata(self):
+        # pylint: disable=no-member
         metadata = MetaData(bind=self.get_sqla_engine())
         return metadata.reflect()
 
@@ -119,20 +137,19 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
             '<a href="{self.url}">{title}</a>'.format(**locals()))
 
     @property
-    def json_data(self):
+    def data(self):
         positions = self.position_json
         if positions:
             positions = json.loads(positions)
-        d = {
+        return {
             'id': self.id,
             'metadata': self.params_dict,
             'css': self.css,
-            'name': self.name,
+            'dashboard_title': self.dashboard_title,
             'slug': self.slug,
             'slices': [slc.data for slc in self.slices],
             'position_json': positions,
         }
-        return json.dumps(d)
 
     @property
     def params(self):
@@ -298,9 +315,9 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
 
     @classmethod
     def get_folder(cls, id):
-        folder = db.session.query(Dashboard)\
+        folder = db.session.query(Dashboard) \
             .filter(Dashboard.id == id,
-                    Dashboard.type == Dashboard.data_types[1])\
+                    Dashboard.type == Dashboard.data_types[1]) \
             .first()
         if not folder:
             raise ParameterException('Not existed the folder with id [{}]'.format(id))
@@ -342,9 +359,9 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
         else:
             ids = self.path.split('/')
             ids = [int(i) for i in ids]
-            folders = db.session.query(Dashboard)\
+            folders = db.session.query(Dashboard) \
                 .filter(Dashboard.id.in_(ids),
-                        Dashboard.type == Dashboard.data_types[1])\
+                        Dashboard.type == Dashboard.data_types[1]) \
                 .all()
             names_dict = {}
             for f in folders:
@@ -399,11 +416,11 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
     def get_ancestors_tree(cls, folder_ids):
         """Get thr tree which contains the paths from root to folders with ids"""
         folder_ids = [int(i) for i in folder_ids]
-        bottom_folders = db.session.query(Dashboard)\
+        bottom_folders = db.session.query(Dashboard) \
             .filter(
-                Dashboard.type == Dashboard.data_types[1],
-                Dashboard.id.in_(folder_ids)
-            ).all()
+            Dashboard.type == Dashboard.data_types[1],
+            Dashboard.id.in_(folder_ids)
+        ).all()
 
         all_ids, routes = [], []
         for f in bottom_folders:
@@ -415,9 +432,9 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
         all_ids = set(all_ids)
         all_folders = db.session.query(Dashboard) \
             .filter(
-                Dashboard.type == Dashboard.data_types[1],
-                Dashboard.id.in_(all_ids)
-            ).all()
+            Dashboard.type == Dashboard.data_types[1],
+            Dashboard.id.in_(all_ids)
+        ).all()
         folder_names = {f.id: f.name for f in all_folders}
 
         tree = []

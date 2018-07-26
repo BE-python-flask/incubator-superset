@@ -385,34 +385,34 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
         if not folder_id:
             query = db.session.query(Dashboard) \
                 .filter(
-                    or_(
-                        and_(
-                            Dashboard.type == Dashboard.data_types[0],
-                            Dashboard.path == None
-                        ),
-                        and_(
-                            Dashboard.type == Dashboard.data_types[1],
-                            ~Dashboard.path.like('%/%')
-                        )
+                or_(
+                    and_(
+                        Dashboard.type == Dashboard.data_types[0],
+                        Dashboard.path == None
+                    ),
+                    and_(
+                        Dashboard.type == Dashboard.data_types[1],
+                        ~Dashboard.path.like('%/%')
                     )
                 )
+            )
         else:
             query = db.session.query(Dashboard) \
                 .filter(
-                    or_(
-                        and_(
-                            Dashboard.type == Dashboard.data_types[0],
-                            Dashboard.path == folder_id
-                        ),
-                        and_(
-                            Dashboard.type == Dashboard.data_types[1],
-                            Dashboard.path.like('%{}/%'.format(folder_id)),
-                            Dashboard.path.like('%/{}/%'.format(folder_id)),
-                            ~Dashboard.path.like('{}/%/%'.format(folder_id)),
-                            ~Dashboard.path.like('%/{}/%/%'.format(folder_id)),
+                or_(
+                    and_(
+                        Dashboard.type == Dashboard.data_types[0],
+                        Dashboard.path == folder_id
+                    ),
+                    and_(
+                        Dashboard.type == Dashboard.data_types[1],
+                        Dashboard.path.like('%{}/%'.format(folder_id)),
+                        Dashboard.path.like('%/{}/%'.format(folder_id)),
+                        ~Dashboard.path.like('{}/%/%'.format(folder_id)),
+                        ~Dashboard.path.like('%/{}/%/%'.format(folder_id)),
                         )
-                    )
                 )
+            )
         query = query.order_by(Dashboard.name.desc())
 
         for d in query.all():
@@ -507,14 +507,14 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
         :return: folders including present and children folders, and dashboards in
         these folders
         """
-        folders = db.session.query(Dashboard)\
+        folders = db.session.query(Dashboard) \
             .filter(
-                Dashboard.type == Dashboard.data_types[1],
-                or_(Dashboard.path.like('{}'.format(folder.id)),
-                    Dashboard.path.like('{}/%'.format(folder.id)),
-                    Dashboard.path.like('%/{}'.format(folder.id)),
-                    Dashboard.path.like('%/{}/%'.format(folder.id)))
-            )\
+            Dashboard.type == Dashboard.data_types[1],
+            or_(Dashboard.path.like('{}'.format(folder.id)),
+                Dashboard.path.like('{}/%'.format(folder.id)),
+                Dashboard.path.like('%/{}'.format(folder.id)),
+                Dashboard.path.like('%/{}/%'.format(folder.id)))
+        ) \
             .all()
         folder_ids = ['{}'.format(f.id) for f in folders]
 
@@ -541,3 +541,24 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
         folder_id = request.args.get('folder_id', None)
         tree = Dashboard.tree_dict(folder_id)
         return json_response(data=tree)
+
+
+class DashboardModelViewAsync(DashboardModelView):  # noqa
+    list_columns = [
+        'id', 'dashboard_link', 'creator', 'modified', 'dashboard_title',
+        'changed_on', 'url', 'changed_by_name',
+    ]
+    label_columns = {
+        'dashboard_link': _('Dashboard'),
+        'dashboard_title': _('Title'),
+        'creator': _('Creator'),
+        'modified': _('Modified'),
+    }
+
+
+class DashboardAddView(DashboardModelView):  # noqa
+    list_columns = [
+        'id', 'dashboard_link', 'creator', 'modified', 'dashboard_title',
+        'changed_on', 'url', 'changed_by_name',
+    ]
+    show_columns = list(set(DashboardModelView.edit_columns + list_columns))
