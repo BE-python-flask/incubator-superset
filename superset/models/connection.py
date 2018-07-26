@@ -1,7 +1,9 @@
+from copy import copy, deepcopy
 import os
 import json
 import textwrap
 import logging
+import numpy
 import sqlparse
 import pandas as pd
 from flask import g
@@ -20,7 +22,7 @@ from sqlalchemy.sql.expression import TextAsFrom
 from sqlalchemy.orm.session import make_transient
 from sqlalchemy.pool import NullPool
 
-from superset import db, app, db_engine_specs, conf
+from superset import db, app, db_engine_specs, conf, utils
 from superset.cache import TokenCache
 from superset.cas.keytab import download_keytab
 from superset.utils import GUARDIAN_AUTH
@@ -29,6 +31,9 @@ from superset.message import DISABLE_GUARDIAN_FOR_KEYTAB, DISABLE_CAS
 from .base import AuditMixinNullable, ImportMixin
 
 config = app.config
+
+custom_password_store = config.get('SQLALCHEMY_CUSTOM_PASSWORD_STORE')
+PASSWORD_MASK = 'X' * 10
 
 
 class Database(Model, AuditMixinNullable, ImportMixin):
@@ -39,6 +44,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
 
     id = Column(Integer, primary_key=True)
     database_name = Column(String(128), nullable=False, unique=True)
+    verbose_name = Column(String(250), unique=True)
     description = Column(Text)
     online = Column(Boolean, default=False)
     sqlalchemy_uri = Column(String(1024))
@@ -51,11 +57,14 @@ class Database(Model, AuditMixinNullable, ImportMixin):
     allow_ctas = Column(Boolean, default=False)
     allow_dml = Column(Boolean, default=True)
     force_ctas_schema = Column(String(64))
+    allow_multi_schema_metadata_fetch = Column(Boolean, default=True)
     args = Column(Text, default=textwrap.dedent("""\
     {
         "connect_args": {}
     }
     """))
+    perm = Column(String(1000))
+    impersonate_user = Column(Boolean, default=False)
 
     __table_args__ = (
         UniqueConstraint('database_name', name='database_name_uc'),
@@ -71,6 +80,19 @@ class Database(Model, AuditMixinNullable, ImportMixin):
 
     @property
     def name(self):
+        return self.database_name
+
+    @property
+    def data(self):
+        return {
+            'name': self.database_name,
+            'backend': self.backend,
+            'allow_multi_schema_metadata_fetch':
+                self.allow_multi_schema_metadata_fetch,
+        }
+
+    @property
+    def unique_name(self):
         return self.database_name
 
     @classmethod
@@ -97,15 +119,46 @@ class Database(Model, AuditMixinNullable, ImportMixin):
     def perm(self):
         return "[{obj.database_name}].(id:{obj.id})".format(obj=self)
 
+    @classmethod
+    def get_password_masked_url_from_uri(cls, uri):
+        url = make_url(uri)
+        return cls.get_password_masked_url(url)
+
+    @classmethod
+    def get_password_masked_url(cls, url):
+        url_copy = deepcopy(url)
+        if url_copy.password is not None and url_copy.password != PASSWORD_MASK:
+            url_copy.password = PASSWORD_MASK
+        return url_copy
+
     def set_sqlalchemy_uri(self, uri):
-        password_mask = "X" * 10
         conn = sqla.engine.url.make_url(uri)
-        if conn.password != password_mask:
+        if conn.password != PASSWORD_MASK:
             # do not over-write the password with the password mask
             self.password = conn.password
-        conn.password = password_mask if conn.password else None
+        conn.password = PASSWORD_MASK if conn.password else None
         self.sqlalchemy_uri = str(conn)  # hides the password
 
+    def get_effective_user(self, url, user_name=None):
+        """
+        Get the effective user, especially during impersonation.
+        :param url: SQL Alchemy URL object
+        :param user_name: Default username
+        :return: The effective username
+        """
+        effective_username = None
+        if self.impersonate_user:
+            effective_username = url.username
+            if user_name:
+                effective_username = user_name
+            elif (
+                            hasattr(g, 'user') and hasattr(g.user, 'username') and
+                            g.user.username is not None
+            ):
+                effective_username = g.user.username
+        return effective_username
+
+    @utils.memoized(watch=('impersonate_user', 'sqlalchemy_uri_decrypted', 'extra'))
     def get_sqla_engine(self, schema=None, use_pool=True):
         url = make_url(self.sqlalchemy_uri_decrypted)
         connect_args = self.append_args(self.get_args().get('connect_args', {}))
@@ -118,17 +171,28 @@ class Database(Model, AuditMixinNullable, ImportMixin):
             return create_engine(url, connect_args=connect_args, poolclass=NullPool)
 
     def get_reserved_words(self):
-        return self.get_sqla_engine().dialect.preparer.reserved_words
+        return self.get_dialect().preparer.reserved_words
 
     def get_quoter(self):
-        return self.get_sqla_engine().dialect.identifier_preparer.quote
+        return self.get_dialect().identifier_preparer.quote
 
     def get_df(self, sql, schema):
-        sql = sql.strip().strip(';')
+        sqls = [str(s).strip().strip(';') for s in sqlparse.parse(sql)]
         eng = self.get_sqla_engine(schema=schema)
-        cur = eng.execute(sql)
-        cols = [col[0] for col in cur.cursor.description]
-        df = pd.DataFrame(cur.fetchall(), columns=cols)
+        for i in range(len(sqls) - 1):
+            eng.execute(sqls[i])
+        df = pd.read_sql_query(sqls[-1], eng)
+
+        def needs_conversion(df_series):
+            if df_series.empty:
+                return False
+            if isinstance(df_series[0], (list, dict)):
+                return True
+            return False
+
+        for k, v in df.dtypes.items():
+            if v.type == numpy.object_ and needs_conversion(df[k]):
+                df[k] = df[k].apply(utils.json_dumps_w_dates)
         return df
 
     def compile_sqla_query(self, qry, schema=None):
@@ -137,24 +201,13 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         return '{}'.format(compiled)
 
     def select_sql(self, table_name, schema=None, limit=100, show_cols=False,
-                   indent=True, columns=set()):
+                   indent=True, latest_partition=True, cols=None):
         """Generates a ``select *`` statement in the proper dialect"""
-        quote = self.get_quoter()
-        fields = '*'
-        if columns:
-            fields = [quote(c) for c in columns]
-        elif show_cols:
-            table = self.get_table(table_name, schema=schema)
-            fields = [quote(c.name) for c in table.columns]
-        if schema:
-            table_name = schema + '.' + table_name
-        qry = select(fields).select_from(text(table_name))
-        if limit:
-            qry = qry.limit(limit)
-        sql = self.compile_sqla_query(qry)
-        if indent:
-            sql = sqlparse.format(sql, reindent=True)
-        return sql
+        eng = self.get_sqla_engine(schema=schema)
+        return self.db_engine_spec.select_star(
+            self, table_name, schema=schema, engine=eng,
+            limit=limit, show_cols=show_cols,
+            indent=indent, latest_partition=latest_partition, cols=cols)
 
     def wrap_sql_limit(self, sql, limit=100):
         qry = (
@@ -164,6 +217,9 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         )
         return self.compile_sqla_query(qry)
 
+    def apply_limit_to_sql(self, sql, limit=1000):
+        return self.db_engine_spec.apply_limit_to_sql(sql, limit, self)
+
     def safe_sqlalchemy_uri(self):
         return self.sqlalchemy_uri
 
@@ -172,19 +228,32 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         engine = self.get_sqla_engine()
         return sqla.inspect(engine)
 
-    def all_table_names(self, schema=None):
-        return sorted(self.inspector.get_table_names(schema))
+    def all_table_names(self, schema=None, force=False):
+        if not schema:
+            if not self.allow_multi_schema_metadata_fetch:
+                return []
+            tables_dict = self.db_engine_spec.fetch_result_sets(
+                self, 'table', force=force)
+            return tables_dict.get('', [])
+        return sorted(
+            self.db_engine_spec.get_table_names(schema, self.inspector))
 
-    def all_view_names(self, schema=None):
+    def all_view_names(self, schema=None, force=False):
+        if not schema:
+            if not self.allow_multi_schema_metadata_fetch:
+                return []
+            views_dict = self.db_engine_spec.fetch_result_sets(
+                self, 'view', force=force)
+            return views_dict.get('', [])
         views = []
         try:
             views = self.inspector.get_view_names(schema)
-        except Exception as e:
+        except Exception:
             pass
         return views
 
     def all_schema_names(self):
-        return sorted(self.inspector.get_schema_names())
+        return sorted(self.db_engine_spec.get_schema_names(self.inspector))
 
     @property
     def db_engine_spec(self):
@@ -203,7 +272,12 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         return self.db_engine_spec.time_grains
 
     def grains_dict(self):
-        return {grain.name: grain for grain in self.grains()}
+        """Allowing to lookup grain by either label or duration
+
+        For backward compatibility"""
+        d = {grain.duration: grain for grain in self.grains()}
+        d.update({grain.label: grain for grain in self.grains()})
+        return d
 
     def get_args(self):
         args = {}
@@ -246,7 +320,10 @@ class Database(Model, AuditMixinNullable, ImportMixin):
     @property
     def sqlalchemy_uri_decrypted(self):
         conn = sqla.engine.url.make_url(self.sqlalchemy_uri)
-        conn.password = self.password
+        if custom_password_store:
+            conn.password = custom_password_store(conn)
+        else:
+            conn.password = self.password
         return str(conn)
 
     @property
@@ -291,8 +368,8 @@ class Database(Model, AuditMixinNullable, ImportMixin):
 
     @classmethod
     def count(cls):
-        return db.session.query(cls)\
-            .filter(cls.database_name != config.get("METADATA_CONN_NAME"))\
+        return db.session.query(cls) \
+            .filter(cls.database_name != config.get("METADATA_CONN_NAME")) \
             .count()
 
     @classmethod
