@@ -13,12 +13,14 @@ from flask_babel import lazy_gettext as _
 from flask_appbuilder import Model
 from flask_appbuilder.models.decorators import renders
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, Text, Boolean, UniqueConstraint
+    Column, Integer, String, ForeignKey, Text, Boolean, UniqueConstraint,
+    Table,
 )
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.orm.session import make_transient
+from urllib import parse  # noqa
 
-from superset import app, db, utils
+from superset import app, db, utils, sm
 from superset.viz import viz_types
 from superset.exception import ParameterException, PermissionException
 from .base import AuditMixinNullable, ImportMixin
@@ -26,6 +28,12 @@ from .dataset import Dataset
 from .connection import Database
 
 config = app.config
+metadata = Model.metadata  # pylint: disable=no-member
+
+slice_user = Table('slice_user', metadata,
+                   Column('id', Integer, primary_key=True),
+                   Column('user_id', Integer, ForeignKey('ab_user.id')),
+                   Column('slice_id', Integer, ForeignKey('slices.id')))
 
 
 class Slice(Model, AuditMixinNullable, ImportMixin):
@@ -50,6 +58,8 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
     description = Column(Text)
     department = Column(String(256))
     cache_timeout = Column(Integer)
+    perm = Column(String(1000))
+    owners = relationship(sm.user_model, secondary=slice_user)
 
     __table_args__ = (
         UniqueConstraint('slice_name', name='slice_name_uc'),
@@ -71,12 +81,19 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         return cls.slice_name
 
     @property
-    def perm(self):
-        return self.slice_name
-
-    @property
     def datasource(self):
         return self.get_datasource
+
+    def clone(self):
+        return Slice(
+            slice_name=self.slice_name,
+            datasource_id=self.datasource_id,
+            datasource_type=self.datasource_type,
+            datasource_name=self.datasource_name,
+            viz_type=self.viz_type,
+            params=self.params,
+            description=self.description,
+            cache_timeout=self.cache_timeout)
 
     @datasource.getter
     @utils.memoized
@@ -91,18 +108,20 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
     @renders('datasource_name')
     def datasource_link(self):
         datasource = self.datasource
-        if datasource:
-            return self.datasource.link
+        return datasource.link if datasource else None
 
     @property
     def datasource_edit_url(self):
-        self.datasource.url
+        # pylint: disable=no-member
+        datasource = self.datasource
+        return datasource.url if datasource else None
 
     @property
     @utils.memoized
     def viz(self):
         d = json.loads(self.params)
         viz_class = viz_types[self.viz_type]
+        # pylint: disable=no-member
         return viz_class(self.datasource, form_data=d)
 
     @property
@@ -122,9 +141,11 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
             d['error'] = str(e)
         d['slice_id'] = self.id
         d['slice_name'] = self.slice_name
-        d['description'] = self.description
         d['slice_url'] = self.slice_url
         d['edit_url'] = self.edit_url
+        d['datasource'] = self.datasource_name
+        d['form_data'] = self.form_data
+        d['description'] = self.description
         d['description_markeddown'] = self.description_markeddown
         return d
 
@@ -133,35 +154,44 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         return json.dumps(self.data)
 
     @property
+    def form_data(self):
+        form_data = {}
+        try:
+            form_data = json.loads(self.params)
+        except Exception as e:
+            logging.error("Malformed json in slice's params")
+            logging.exception(e)
+        form_data.update({
+            'slice_id': self.id,
+            'viz_type': self.viz_type,
+            'datasource': '{}__{}'.format(
+                self.datasource_id, self.datasource_type),
+        })
+        if self.cache_timeout:
+            form_data['cache_timeout'] = self.cache_timeout
+        return form_data
+
+    def get_explore_url(self, base_url='/p/explore', overrides=None):
+        overrides = overrides or {}
+        form_data = {'slice_id': self.id}
+        form_data.update(overrides)
+        params = parse.quote(json.dumps(form_data))
+        return (
+            '{base_url}/?form_data={params}'.format(**locals()))
+
+    @property
     def slice_url(self):
         """Defines the url to access the slice"""
-        try:
-            slice_params = json.loads(self.params)
-        except Exception as e:
-            logging.exception(e)
-            slice_params = {}
-        slice_params['slice_id'] = self.id
-        slice_params['json'] = "false"
-        slice_params['slice_name'] = self.slice_name
-        from werkzeug.urls import Href
-        href = Href(
-            "/p/explore/{obj.datasource_type}/"
-            "{obj.datasource_id}/".format(obj=self))
-        return href(slice_params)
+        return self.get_explore_url()
 
     @property
-    def source_table_url(self):
-        if self.database_id and self.full_table_name:
-            return "/p/explore/table/0/?database_id={}&full_tb_name={}" \
-                .format(self.database_id, self.full_table_name)
-        else:
-            return None
+    def explore_json_url(self):
+        """Defines the url to access the slice"""
+        return self.get_explore_url('/p/explore_json')
 
     @property
-    def slice_id_url(self):
-        return (
-            "/p/{slc.datasource_type}/{slc.datasource_id}/{slc.id}/"
-        ).format(slc=self)
+    def edit_url(self):
+        return '/slice/edit/{}'.format(self.id)
 
     @property
     def edit_url(self):
@@ -173,32 +203,23 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         name = escape(self.slice_name)
         return Markup('<a href="{url}">{name}</a>'.format(**locals()))
 
-    def get_viz(self, url_params_multidict=None):
+    def get_viz(self, force=False):
         """Creates :py:class:viz.BaseViz object from the url_params_multidict.
 
-        :param werkzeug.datastructures.MultiDict url_params_multidict:
-            Contains the visualization params, they override the self.params
-            stored in the database
         :return: object of the 'viz_type' type that is taken from the
             url_params_multidict or self.params.
         :rtype: :py:class:viz.BaseViz
         """
-        slice_params = json.loads(self.params)  # {}
+        slice_params = json.loads(self.params)
         slice_params['slice_id'] = self.id
-        slice_params['json'] = "false"
+        slice_params['json'] = 'false'
         slice_params['slice_name'] = self.slice_name
-        slice_params['viz_type'] = self.viz_type if self.viz_type else "table"
-        if url_params_multidict:
-            slice_params.update(url_params_multidict)
-            to_del = [k for k in slice_params if k not in url_params_multidict]
-            for k in to_del:
-                del slice_params[k]
+        slice_params['viz_type'] = self.viz_type if self.viz_type else 'table'
 
-        immutable_slice_params = ImmutableMultiDict(slice_params)
-        return viz_types[immutable_slice_params.get('viz_type')](
+        return viz_types[slice_params.get('viz_type')](
             self.datasource,
-            form_data=immutable_slice_params,
-            slice_=self
+            form_data=slice_params,
+            force=force,
         )
 
     @classmethod
