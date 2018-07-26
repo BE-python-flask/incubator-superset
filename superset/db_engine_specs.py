@@ -30,6 +30,7 @@ import boto3
 from flask import g
 from flask_babel import lazy_gettext as _
 import pandas
+from past.builtins import basestring
 import sqlalchemy as sqla
 from sqlalchemy import select
 from sqlalchemy.engine import create_engine
@@ -40,8 +41,8 @@ import sqlparse
 from tableschema import Table
 from werkzeug.utils import secure_filename
 
-from superset import app, cache_util, conf, db, utils
-from superset.exceptions import SupersetTemplateException
+from superset import app, cache, conf, db, utils
+from superset.exception import SupersetException
 from superset.utils import QueryStatus
 
 config = app.config
@@ -86,9 +87,53 @@ class BaseEngineSpec(object):
         return cls.epoch_to_dttm().replace('{col}', '({col}/1000.0)')
 
     @classmethod
-    def extra_table_metadata(cls, database, table_name, schema_name):
+    def get_datatype(cls, type_code):
+        if isinstance(type_code, basestring) and len(type_code):
+            return type_code.upper()
+
+    @classmethod
+    def extra_schema_metadata(cls, database, schema):
+        """Returns engine-specific schema metadata"""
+        raise NotImplementedError()
+
+    @classmethod
+    def extra_table_metadata(cls, database, schema, table):
         """Returns engine-specific table metadata"""
-        return {}
+        columns = database.get_columns(table, schema)
+        indexes = database.get_indexes(table, schema)
+        primary_key = database.get_pk_constraint(table, schema)
+        foreign_keys = database.get_foreign_keys(table, schema)
+
+        for c in columns:
+            c['type'] = '{}'.format(c['type'])
+
+        keys = []
+        if primary_key and primary_key.get('constrained_columns'):
+            primary_key['column_names'] = primary_key.pop('constrained_columns')
+            primary_key['type'] = 'pk'
+            keys += [primary_key]
+        for fk in foreign_keys:
+            fk['column_names'] = fk.pop('constrained_columns')
+            fk['type'] = 'fk'
+        keys += foreign_keys
+        for idx in indexes:
+            idx['type'] = 'index'
+        keys += indexes
+
+        return {'columns': columns,
+                'primary_key': primary_key,
+                'foreign_keys': foreign_keys,
+                'indexes': keys}
+
+    @classmethod
+    def extra_column_metadata(cls, database, schema, table, column):
+        """Returns engine-specific column metadata"""
+        column = database.get_column(table, column, schema)
+        metadata = {}
+        if column:
+            column['type'] = '{}'.format(column['type'])
+            metadata = column
+        return metadata
 
     @classmethod
     def apply_limit_to_sql(cls, sql, limit, database):
@@ -97,10 +142,10 @@ class BaseEngineSpec(object):
             sql = sql.strip('\t\n ;')
             qry = (
                 select('*')
-                .select_from(
+                    .select_from(
                     TextAsFrom(text(sql), ['*']).alias('inner_qry'),
                 )
-                .limit(limit)
+                    .limit(limit)
             )
             return database.compile_sqla_query(qry)
         elif LimitMethod.FORCE_LIMIT:
@@ -196,7 +241,7 @@ class BaseEngineSpec(object):
         return "'{}'".format(dttm.strftime('%Y-%m-%d %H:%M:%S'))
 
     @classmethod
-    @cache_util.memoized_func(
+    @cache.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -528,7 +573,7 @@ class SqliteEngineSpec(BaseEngineSpec):
         return "datetime({col}, 'unixepoch')"
 
     @classmethod
-    @cache_util.memoized_func(
+    @cache.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -565,33 +610,34 @@ class MySQLEngineSpec(BaseEngineSpec):
     time_grains = (
         Grain('Time Column', _('Time Column'), '{col}', None),
         Grain('second', _('second'), 'DATE_ADD(DATE({col}), '
-              'INTERVAL (HOUR({col})*60*60 + MINUTE({col})*60'
-              ' + SECOND({col})) SECOND)',
+                                     'INTERVAL (HOUR({col})*60*60 + MINUTE({col})*60'
+                                     ' + SECOND({col})) SECOND)',
               'PT1S'),
         Grain('minute', _('minute'), 'DATE_ADD(DATE({col}), '
-              'INTERVAL (HOUR({col})*60 + MINUTE({col})) MINUTE)',
+                                     'INTERVAL (HOUR({col})*60 + MINUTE({col})) MINUTE)',
               'PT1M'),
         Grain('hour', _('hour'), 'DATE_ADD(DATE({col}), '
-              'INTERVAL HOUR({col}) HOUR)',
+                                 'INTERVAL HOUR({col}) HOUR)',
               'PT1H'),
         Grain('day', _('day'), 'DATE({col})', 'P1D'),
         Grain('week', _('week'), 'DATE(DATE_SUB({col}, '
-              'INTERVAL DAYOFWEEK({col}) - 1 DAY))',
+                                 'INTERVAL DAYOFWEEK({col}) - 1 DAY))',
               'P1W'),
         Grain('month', _('month'), 'DATE(DATE_SUB({col}, '
-              'INTERVAL DAYOFMONTH({col}) - 1 DAY))',
+                                   'INTERVAL DAYOFMONTH({col}) - 1 DAY))',
               'P1M'),
         Grain('quarter', _('quarter'), 'MAKEDATE(YEAR({col}), 1) '
-              '+ INTERVAL QUARTER({col}) QUARTER - INTERVAL 1 QUARTER',
+                                       '+ INTERVAL QUARTER({col}) QUARTER - INTERVAL 1 QUARTER',
               'P0.25Y'),
         Grain('year', _('year'), 'DATE(DATE_SUB({col}, '
-              'INTERVAL DAYOFYEAR({col}) - 1 DAY))',
+                                 'INTERVAL DAYOFYEAR({col}) - 1 DAY))',
               'P1Y'),
         Grain('week_start_monday', _('week_start_monday'),
               'DATE(DATE_SUB({col}, '
               'INTERVAL DAYOFWEEK(DATE_SUB({col}, INTERVAL 1 DAY)) - 1 DAY))',
               'P1W'),
     )
+    type_code_map = {}  # loaded from get_datatype only if needed
 
     @classmethod
     def convert_dttm(cls, target_type, dttm):
@@ -607,6 +653,23 @@ class MySQLEngineSpec(BaseEngineSpec):
         return uri
 
     @classmethod
+    def get_datatype(cls, type_code):
+        if not cls.type_code_map:
+            # only import and store if needed at least once
+            import MySQLdb
+            ft = MySQLdb.constants.FIELD_TYPE
+            cls.type_code_map = {
+                getattr(ft, k): k
+                for k in dir(ft)
+                if not k.startswith('_')
+            }
+        datatype = type_code
+        if isinstance(type_code, int):
+            datatype = cls.type_code_map.get(type_code)
+        if datatype and isinstance(datatype, basestring) and len(datatype):
+            return datatype
+
+    @classmethod
     def epoch_to_dttm(cls):
         return 'from_unixtime({col})'
 
@@ -620,6 +683,30 @@ class MySQLEngineSpec(BaseEngineSpec):
         except Exception:
             pass
         return message
+
+
+class InceptorEngineSpec(BaseEngineSpec):
+    engine = 'inceptor'
+    time_grains = tuple()
+
+    @classmethod
+    def extra_schema_metadata(cls, database, schema):
+        engine = database.get_sqla_engine()
+        query = engine.execute(
+            "SELECT commentstring, owner_name FROM system.databases_v "
+            "WHERE database_name='{}'".format(schema))
+        rs = query.fetchone()
+        metadata = {}
+        if rs:
+            metadata['comment'] = rs[0]
+            metadata['owner'] = rs[1]
+        return metadata
+
+    @classmethod
+    def adjust_database_uri(cls, uri, selected_schema=None):
+        if selected_schema:
+            uri.database = selected_schema
+        return uri
 
 
 class PrestoEngineSpec(BaseEngineSpec):
@@ -687,7 +774,7 @@ class PrestoEngineSpec(BaseEngineSpec):
         return 'from_unixtime({col})'
 
     @classmethod
-    @cache_util.memoized_func(
+    @cache.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -772,9 +859,9 @@ class PrestoEngineSpec(BaseEngineSpec):
     @classmethod
     def extract_error_message(cls, e):
         if (
-                hasattr(e, 'orig') and
-                type(e.orig).__name__ == 'DatabaseError' and
-                isinstance(e.orig[0], dict)):
+                        hasattr(e, 'orig') and
+                            type(e.orig).__name__ == 'DatabaseError' and
+                    isinstance(e.orig[0], dict)):
             error_dict = e.orig[0]
             return '{} at {}: {}'.format(
                 error_dict.get('errorName'),
@@ -782,9 +869,9 @@ class PrestoEngineSpec(BaseEngineSpec):
                 error_dict.get('message'),
             )
         if (
-                type(e).__name__ == 'DatabaseError' and
-                hasattr(e, 'args') and
-                len(e.args) > 0
+                            type(e).__name__ == 'DatabaseError' and
+                        hasattr(e, 'args') and
+                        len(e.args) > 0
         ):
             error_dict = e.args[0]
             return error_dict.get('message')
@@ -854,10 +941,10 @@ class PrestoEngineSpec(BaseEngineSpec):
         """
         indexes = database.get_indexes(table_name, schema)
         if len(indexes[0]['column_names']) < 1:
-            raise SupersetTemplateException(
+            raise SupersetException(
                 'The table should have one partitioned field')
         elif not show_first and len(indexes[0]['column_names']) > 1:
-            raise SupersetTemplateException(
+            raise SupersetException(
                 'The table should have a single partitioned field '
                 'to use this function. You may want to use '
                 '`presto.latest_sub_partition`')
@@ -898,13 +985,13 @@ class PrestoEngineSpec(BaseEngineSpec):
         for k in kwargs.keys():
             if k not in k in part_fields:
                 msg = 'Field [{k}] is not part of the portioning key'
-                raise SupersetTemplateException(msg)
+                raise SupersetException(msg)
         if len(kwargs.keys()) != len(part_fields) - 1:
             msg = (
                 'A filter needs to be specified for {} out of the '
                 '{} fields.'
             ).format(len(part_fields) - 1, len(part_fields))
-            raise SupersetTemplateException(msg)
+            raise SupersetException(msg)
 
         for field in part_fields:
             if field not in kwargs.keys():
@@ -955,7 +1042,7 @@ class HiveEngineSpec(PrestoEngineSpec):
         hive.Cursor.fetch_logs = patched_hive.fetch_logs
 
     @classmethod
-    @cache_util.memoized_func(
+    @cache.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -1006,7 +1093,7 @@ class HiveEngineSpec(PrestoEngineSpec):
         upload_prefix = config['CSV_TO_HIVE_UPLOAD_DIRECTORY']
 
         upload_path = config['UPLOAD_FOLDER'] + \
-            secure_filename(form.csv_file.data.filename)
+                      secure_filename(form.csv_file.data.filename)
 
         hive_table_schema = Table(upload_path).infer()
         column_name_and_type = []
@@ -1201,7 +1288,7 @@ class HiveEngineSpec(PrestoEngineSpec):
 
         # Must be Hive connection, enable impersonation, and set param auth=LDAP|KERBEROS
         if (backend_name == 'hive' and 'auth' in url.query.keys() and
-                impersonate_user is True and username is not None):
+                    impersonate_user is True and username is not None):
             configuration['hive.server2.proxy.user'] = username
         return configuration
 
@@ -1214,34 +1301,34 @@ class MssqlEngineSpec(BaseEngineSpec):
     time_grains = (
         Grain('Time Column', _('Time Column'), '{col}', None),
         Grain('second', _('second'), 'DATEADD(second, '
-              "DATEDIFF(second, '2000-01-01', {col}), '2000-01-01')",
+                                     "DATEDIFF(second, '2000-01-01', {col}), '2000-01-01')",
               'PT1S'),
         Grain('minute', _('minute'), 'DATEADD(minute, '
-              'DATEDIFF(minute, 0, {col}), 0)',
+                                     'DATEDIFF(minute, 0, {col}), 0)',
               'PT1M'),
         Grain('5 minute', _('5 minute'), 'DATEADD(minute, '
-              'DATEDIFF(minute, 0, {col}) / 5 * 5, 0)',
+                                         'DATEDIFF(minute, 0, {col}) / 5 * 5, 0)',
               'PT5M'),
         Grain('half hour', _('half hour'), 'DATEADD(minute, '
-              'DATEDIFF(minute, 0, {col}) / 30 * 30, 0)',
+                                           'DATEDIFF(minute, 0, {col}) / 30 * 30, 0)',
               'PT0.5H'),
         Grain('hour', _('hour'), 'DATEADD(hour, '
-              'DATEDIFF(hour, 0, {col}), 0)',
+                                 'DATEDIFF(hour, 0, {col}), 0)',
               'PT1H'),
         Grain('day', _('day'), 'DATEADD(day, '
-              'DATEDIFF(day, 0, {col}), 0)',
+                               'DATEDIFF(day, 0, {col}), 0)',
               'P1D'),
         Grain('week', _('week'), 'DATEADD(week, '
-              'DATEDIFF(week, 0, {col}), 0)',
+                                 'DATEDIFF(week, 0, {col}), 0)',
               'P1W'),
         Grain('month', _('month'), 'DATEADD(month, '
-              'DATEDIFF(month, 0, {col}), 0)',
+                                   'DATEDIFF(month, 0, {col}), 0)',
               'P1M'),
         Grain('quarter', _('quarter'), 'DATEADD(quarter, '
-              'DATEDIFF(quarter, 0, {col}), 0)',
+                                       'DATEDIFF(quarter, 0, {col}), 0)',
               'P0.25Y'),
         Grain('year', _('year'), 'DATEADD(year, '
-              'DATEDIFF(year, 0, {col}), 0)',
+                                 'DATEDIFF(year, 0, {col}), 0)',
               'P1Y'),
     )
 

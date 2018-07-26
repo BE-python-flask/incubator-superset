@@ -25,7 +25,7 @@ def cast_filter_data(form_data):
             op_str = '{}_op_{}'.format(prefix, i)
             val_str = '{}_eq_{}'.format(prefix, i)
             if col_str in fd and op_str in fd and val_str in fd \
-               and len(fd[val_str]) > 0:
+                    and len(fd[val_str]) > 0:
                 f = {}
                 f['col'] = fd[col_str]
                 f['op'] = fd[op_str]

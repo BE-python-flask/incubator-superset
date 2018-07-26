@@ -10,7 +10,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import copy
 from datetime import datetime, timedelta
 import hashlib
@@ -38,6 +38,7 @@ from six import string_types, text_type
 from six.moves import cPickle as pkl, reduce
 
 from superset import app, cache, get_manifest_file, utils
+from superset.exception import DatabaseException
 from superset.utils import DTTM_ALIAS, JS_MAX_INTEGER, merge_extra_filters
 
 
@@ -317,8 +318,8 @@ class BaseViz(object):
         if self.datasource.cache_timeout:
             return self.datasource.cache_timeout
         if (
-                hasattr(self.datasource, 'database') and
-                self.datasource.database.cache_timeout):
+                    hasattr(self.datasource, 'database') and
+                    self.datasource.database.cache_timeout):
             return self.datasource.database.cache_timeout
         return config.get('CACHE_DEFAULT_TIMEOUT')
 
@@ -404,10 +405,10 @@ class BaseViz(object):
                 stacktrace = traceback.format_exc()
 
             if (
-                    is_loaded and
-                    cache_key and
-                    cache and
-                    self.status != utils.QueryStatus.FAILED):
+                                is_loaded and
+                                cache_key and
+                            cache and
+                            self.status != utils.QueryStatus.FAILED):
                 try:
                     cache_value = dict(
                         dttm=cached_dttm,
@@ -527,7 +528,7 @@ class TableViz(BaseViz):
             d['metrics'] = d['metrics'] + list(filter(
                 lambda m: m not in d['metrics'],
                 fd['percent_metrics'] or [],
-            ))
+                ))
 
         d['is_timeseries'] = self.should_be_timeseries()
         return d
@@ -535,9 +536,9 @@ class TableViz(BaseViz):
     def get_data(self, df):
         fd = self.form_data
         if (
-                not self.should_be_timeseries() and
-                df is not None and
-                DTTM_ALIAS in df
+                        not self.should_be_timeseries() and
+                            df is not None and
+                        DTTM_ALIAS in df
         ):
             del df[DTTM_ALIAS]
 
@@ -563,8 +564,8 @@ class TableViz(BaseViz):
             metrics = fd.get('metrics') or []
             metrics = [self.get_metric_label(m) for m in metrics]
             for m in filter(
-                lambda m: m not in metrics and m in df.columns,
-                percent_metrics,
+                    lambda m: m not in metrics and m in df.columns,
+                    percent_metrics,
             ):
                 del df[m]
 
@@ -648,15 +649,15 @@ class PivotTableViz(BaseViz):
         if not metrics:
             raise Exception(_('Please choose at least one metric'))
         if (
-                any(v in groupby for v in columns) or
-                any(v in columns for v in groupby)):
+                    any(v in groupby for v in columns) or
+                    any(v in columns for v in groupby)):
             raise Exception(_("Group By' and 'Columns' can't overlap"))
         return d
 
     def get_data(self, df):
         if (
-                self.form_data.get('granularity') == 'all' and
-                DTTM_ALIAS in df):
+                        self.form_data.get('granularity') == 'all' and
+                        DTTM_ALIAS in df):
             del df[DTTM_ALIAS]
         df = df.pivot_table(
             index=self.form_data.get('groupby'),
@@ -1102,9 +1103,9 @@ class NVD3TimeSeriesViz(NVD3Viz):
             else:
                 series_title = text_type(name)
             if (
-                    isinstance(series_title, (list, tuple)) and
-                    len(series_title) > 1 and
-                    len(self.metric_labels) == 1):
+                            isinstance(series_title, (list, tuple)) and
+                                len(series_title) > 1 and
+                            len(self.metric_labels) == 1):
                 # Removing metric from series name if only one metric
                 series_title = series_title[1:]
             if title_suffix:
@@ -1263,7 +1264,7 @@ class MultiLineViz(NVD3Viz):
     def get_data(self, df):
         fd = self.form_data
         # Late imports to avoid circular import issues
-        from superset.models.core import Slice
+        from superset.models import Slice
         from superset import db
         slice_ids1 = fd.get('line_charts')
         slices1 = db.session.query(Slice).filter(Slice.id.in_(slice_ids1)).all()
@@ -1297,7 +1298,7 @@ class NVD3DualLineViz(NVD3Viz):
             raise Exception(_('Pick a metric for right axis!'))
         if m1 == m2:
             raise Exception(_('Please choose different metrics'
-                            ' on left and right axis'))
+                              ' on left and right axis'))
         return d
 
     def to_series(self, df, classed=''):
@@ -1491,8 +1492,8 @@ class DistributionBarViz(DistributionPieViz):
         d = super(DistributionBarViz, self).query_obj()  # noqa
         fd = self.form_data
         if (
-            len(d['groupby']) <
-            len(fd.get('groupby') or []) + len(fd.get('columns') or [])
+                    len(d['groupby']) <
+                        len(fd.get('groupby') or []) + len(fd.get('columns') or [])
         ):
             raise Exception(
                 _("Can't have overlap between Series and Breakdowns"))
@@ -1951,18 +1952,18 @@ class MapboxViz(BaseViz):
         else:
             # Ensuring columns chosen are all in group by
             if (label_col and len(label_col) >= 1 and
-                    label_col[0] != 'count' and
-                    label_col[0] not in fd.get('groupby')):
+                        label_col[0] != 'count' and
+                        label_col[0] not in fd.get('groupby')):
                 raise Exception(_(
                     'Choice of [Label] must be present in [Group By]'))
 
             if (fd.get('point_radius') != 'Auto' and
-                    fd.get('point_radius') not in fd.get('groupby')):
+                        fd.get('point_radius') not in fd.get('groupby')):
                 raise Exception(_(
                     'Choice of [Point Radius] must be present in [Group By]'))
 
             if (fd.get('all_columns_x') not in fd.get('groupby') or
-                    fd.get('all_columns_y') not in fd.get('groupby')):
+                        fd.get('all_columns_y') not in fd.get('groupby')):
                 raise Exception(_(
                     '[Longitude] and [Latitude] columns must be present in [Group By]'))
         return d
@@ -2043,7 +2044,7 @@ class DeckGLMultiLayer(BaseViz):
     def get_data(self, df):
         fd = self.form_data
         # Late imports to avoid circular import issues
-        from superset.models.core import Slice
+        from superset.models import Slice
         from superset import db
         slice_ids = fd.get('deck_slices')
         slices = db.session.query(Slice).filter(Slice.id.in_(slice_ids)).all()
@@ -2109,6 +2110,11 @@ class BaseDeckGLViz(BaseViz):
             df[key] = list(zip(latlong.apply(lambda x: x[0]),
                                latlong.apply(lambda x: x[1])))
             del df[spatial.get('geohashCol')]
+
+        if df.get(key) is None:
+            raise DatabaseException(_('Encountered invalid NULL spatial entry, \
+                                       please consider filtering those out'))
+
         return df
 
     def query_obj(self):
@@ -2551,7 +2557,7 @@ class PartitionViz(NVD3TimeSeriesViz):
             'val': levels[level][metric][dims][i],
             'children': self.nest_values(
                 levels, level + 1, metric, dims + (i,),
-            ),
+                        ),
         } for i in levels[level][metric][dims].index]
 
     def nest_procs(self, procs, level=-1, dims=(), time=None):
@@ -2597,6 +2603,8 @@ class PartitionViz(NVD3TimeSeriesViz):
 viz_types = {
     o.viz_type: o for o in globals().values()
     if (
-        inspect.isclass(o) and
-        issubclass(o, BaseViz) and
-        o.viz_type not in config.get('VIZ_TYPE_BLACKLIST'))}
+    inspect.isclass(o) and
+    issubclass(o, BaseViz) and
+    o.viz_type not in config.get('VIZ_TYPE_BLACKLIST'))}
+
+viz_verbose_names = {k: v.verbose_name for k, v in viz_types.items()}

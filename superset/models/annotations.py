@@ -12,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from superset.models.helpers import AuditMixinNullable
+from superset.models.base import AuditMixinNullable
 
 
 class AnnotationLayer(Model, AuditMixinNullable):

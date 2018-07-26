@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-# pylint: disable=C,R,W
 """Utility functions used across Superset"""
 from __future__ import absolute_import
 from __future__ import division
@@ -27,9 +25,10 @@ import zlib
 import bleach
 import celery
 from dateutil.parser import parse
-from flask import flash, Markup, render_template
+from flask import flash, Markup, render_template, g
 from flask_babel import gettext as __
 from flask_caching import Cache
+from flask_login import login_user
 import markdown as md
 import numpy
 import pandas as pd
@@ -38,23 +37,75 @@ from past.builtins import basestring
 from pydruid.utils.having import Having
 import pytz
 import sqlalchemy as sa
-from sqlalchemy import event, exc, select
+from sqlalchemy import exc, select
 from sqlalchemy.types import TEXT, TypeDecorator
 
-from superset.exceptions import SupersetException, SupersetTimeoutException
+from superset.exception import SupersetException, DatabaseException
 
 
 logging.getLogger('MARKDOWN').setLevel(logging.INFO)
 
 PY3K = sys.version_info >= (3, 0)
 EPOCH = datetime(1970, 1, 1)
-DTTM_ALIAS = '__timestamp'
+DTTM_ALIAS = 'timestamp__'
+GUARDIAN_AUTH = 'GUARDIAN_AUTH'
 ADHOC_METRIC_EXPRESSION_TYPES = {
     'SIMPLE': 'SIMPLE',
     'SQL': 'SQL',
 }
 
 JS_MAX_INTEGER = 9007199254740991   # Largest int Java Script can handle 2^53-1
+
+SIZE_UNITS = ['B', 'K', 'M', 'G', 'T']
+
+
+def human_size(size):
+    """
+    :param size: the number of bytes
+    :return: a string of size with unit (B, K, M, G, T)
+    """
+    size = int(size)
+    index = 0
+    if size == 0:
+        return '{}'.format(size)
+    elif size < 1024:
+        return '{}B'.format(size)
+    else:
+        while size >= 1024:
+            size /= 1024
+            index += 1
+            if index + 1 >= len(SIZE_UNITS):
+                break
+        return '{:.1f}{}'.format(size, SIZE_UNITS[index])
+
+
+def add_or_edit_user(appbuilder, username, password):
+    """
+    When passed Guardian or CAS verification, need to add a user to database
+    or edit the user in database
+    """
+    try:
+        user = appbuilder.sm.find_user(username=username)
+        if not user:
+            user = appbuilder.sm.add_user(
+                username, username, username, '{}@transwarp.io'.format(username),
+                appbuilder.sm.find_role('Admin'),  password=password)
+            if not user:
+                raise DatabaseException('Add user: [{}] failed'.format(username))
+        appbuilder.sm.reset_password(user.id, password)
+        user.password2 = password
+        appbuilder.sm.get_session.commit()
+        logging.info('Add or edit user: [{}] succeed'.format(username))
+        return user
+    except Exception as e:
+        logging.exception(str(e))
+        raise e
+
+
+def login_app(appbuilder, username, password):
+    user = add_or_edit_user(appbuilder, username, password)
+    login_user(user)
+    return g.user
 
 
 def flasher(msg, severity=None):
@@ -222,17 +273,16 @@ def decode_dashboards(o):
     Function to be passed into json.loads obj_hook parameter
     Recreates the dashboard object from a json representation.
     """
-    import superset.models.core as models
-    from superset.connectors.sqla.models import (
-        SqlaTable, SqlMetric, TableColumn,
+    from superset.models import (
+        Dataset, SqlMetric, TableColumn, Dashboard, Slice
     )
 
     if '__Dashboard__' in o:
-        d = models.Dashboard()
+        d = Dashboard()
         d.__dict__.update(o['__Dashboard__'])
         return d
     elif '__Slice__' in o:
-        d = models.Slice()
+        d = Slice()
         d.__dict__.update(o['__Slice__'])
         return d
     elif '__TableColumn__' in o:
@@ -240,7 +290,7 @@ def decode_dashboards(o):
         d.__dict__.update(o['__TableColumn__'])
         return d
     elif '__SqlaTable__' in o:
-        d = SqlaTable()
+        d = Dataset()
         d.__dict__.update(o['__SqlaTable__'])
         return d
     elif '__SqlMetric__' in o:
@@ -505,7 +555,7 @@ class timeout(object):
 
     def handle_timeout(self, signum, frame):
         logging.error('Process timed out')
-        raise SupersetTimeoutException(self.error_message)
+        raise SupersetException(self.error_message)
 
     def __enter__(self):
         try:
@@ -523,8 +573,15 @@ class timeout(object):
             logging.exception(e)
 
 
+def wrap_clause_in_parens(sql):
+    """Wrap where/having clause with parenthesis if necessary"""
+    if sql.strip():
+        sql = '({})'.format(sql)
+    return sa.text(sql)
+
+
 def pessimistic_connection_handling(some_engine):
-    @event.listens_for(some_engine, 'engine_connect')
+    #@event.listens_for(some_engine, 'engine_connect')
     def ping_connection(connection, branch):
         if branch:
             # 'branch' refers to a sub-connection of a connection,
@@ -754,8 +811,8 @@ def merge_extra_filters(form_data):
                             # Add filters for unequal lists
                             # order doesn't matter
                             if (
-                                sorted(existing_filters[filter_key]) !=
-                                sorted(filtr['val'])
+                                        sorted(existing_filters[filter_key]) !=
+                                        sorted(filtr['val'])
                             ):
                                 form_data['filters'] += [filtr]
                         else:
@@ -796,17 +853,17 @@ def user_label(user):
 
 def get_or_create_main_db():
     from superset import conf, db
-    from superset.models import core as models
+    from superset.models import Database
 
     logging.info('Creating database reference')
     dbobj = (
-        db.session.query(models.Database)
-        .filter_by(database_name='main')
-        .first())
+        db.session.query(Database)
+            .filter_by(database_name='main')
+            .first())
     if not dbobj:
-        dbobj = models.Database(database_name='main')
+        dbobj = Database(database_name='main')
     dbobj.set_sqlalchemy_uri(conf.get('SQLALCHEMY_DATABASE_URI'))
-    dbobj.expose_in_sqllab = True
+    dbobj.expose = False
     dbobj.allow_run_sync = True
     db.session.add(dbobj)
     db.session.commit()
