@@ -9,4 +9,4 @@ from .aider import (
     Log, FavStar, Number, Url, KeyValue, CssTemplate, DatasourceAccessRequest,
     str_to_model, model_name_columns
 )
-from .sql_lab import Query
+from .sql_lab import Query, SavedQuery
