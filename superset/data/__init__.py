@@ -1,33 +1,32 @@
 """Loads datasets, dashboards and slices in a new superset instance"""
-# pylint: disable=C,R,W
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import datetime
 import gzip
 import json
 import os
-import random
 import textwrap
+import datetime
+import geohash
+import random
+import logging
 
 import pandas as pd
-from sqlalchemy import BigInteger, Date, DateTime, Float, String, Text
-import geohash
 import polyline
+from sqlalchemy import String, DateTime, Date, Float, BigInteger, Integer, Text
 
-from superset import app, db, security_manager, utils
-from superset.connectors.connector_registry import ConnectorRegistry
-from superset.connectors.sqla.models import TableColumn
-from superset.models import core as models
+from superset import app, db, models, utils
+from superset.models import TableColumn
+from superset.security import get_or_create_main_db
 
 # Shortcuts
 DB = models.Database
 Slice = models.Slice
+TBL = models.Dataset
 Dash = models.Dashboard
-
-TBL = ConnectorRegistry.sources['table']
+Log = models.Log
 
 config = app.config
 
@@ -36,12 +35,16 @@ DATA_FOLDER = os.path.join(config.get("BASE_DIR"), 'data')
 misc_dash_slices = []  # slices assembled in a "Misc Chart" dashboard
 
 
-def merge_slice(slc):
+def merge_slice(slc, user_id=None):
     o = db.session.query(Slice).filter_by(slice_name=slc.slice_name).first()
     if o:
         db.session.delete(o)
+        Log.log_delete(o, 'slice', user_id)
+    slc.online = True
+    slc.created_by_fk=user_id
     db.session.add(slc)
     db.session.commit()
+    Log.log_add(slc, 'slice', user_id)
 
 
 def get_slice_json(defaults, **kwargs):
@@ -50,9 +53,10 @@ def get_slice_json(defaults, **kwargs):
     return json.dumps(d, indent=4, sort_keys=True)
 
 
-def load_energy():
+def load_energy(user_id=None):
     """Loads an energy related dataset to use with sankey and graphs"""
     tbl_name = 'energy_usage'
+    logging.info("Loading data into table [energy_usage]")
     with gzip.open(os.path.join(DATA_FOLDER, 'energy.json.gz')) as f:
         pdf = pd.read_json(f)
     pdf.to_sql(
@@ -67,14 +71,18 @@ def load_energy():
         },
         index=False)
 
-    print("Creating table [wb_health_population] reference")
+    logging.info("Creating dataset [energy_usage]")
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name="能源消耗",
+                  table_name=tbl_name)
     tbl.description = "Energy consumption"
-    tbl.database = utils.get_or_create_main_db()
+    tbl.online = True
+    tbl.database = get_or_create_main_db()
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
 
     slc = Slice(
@@ -99,7 +107,7 @@ def load_energy():
         """),
     )
     misc_dash_slices.append(slc.slice_name)
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
     slc = Slice(
         slice_name="Energy Force Layout",
@@ -122,13 +130,12 @@ def load_energy():
             "viz_type": "directed_force",
             "where": ""
         }
-        """),
-    )
+        """))
     misc_dash_slices.append(slc.slice_name)
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
     slc = Slice(
-        slice_name="Heatmap",
+        slice_name="能源热力图",
         viz_type='heatmap',
         datasource_type='table',
         datasource_id=tbl.id,
@@ -148,15 +155,15 @@ def load_energy():
             "xscale_interval": "1",
             "yscale_interval": "1"
         }
-        """),
-    )
+        """))
     misc_dash_slices.append(slc.slice_name)
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
 
-def load_world_bank_health_n_pop():
+def load_world_bank_health_n_pop(user_id=None):
     """Loads the world bank health dataset, slices and a dashboard"""
     tbl_name = 'wb_health_population'
+    logging.info("Loading data into table [wb_health_population]")
     with gzip.open(os.path.join(DATA_FOLDER, 'countries.json.gz')) as f:
         pdf = pd.read_json(f)
     pdf.columns = [col.replace('.', '_') for col in pdf.columns]
@@ -174,16 +181,19 @@ def load_world_bank_health_n_pop():
         },
         index=False)
 
-    print("Creating table [wb_health_population] reference")
+    logging.info("Creating dataset [wb_health_population]")
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name='世界各国人口',
+                  table_name=tbl_name)
     tbl.description = utils.readfile(os.path.join(DATA_FOLDER, 'countries.md'))
     tbl.main_dttm_col = 'year'
-    tbl.database = utils.get_or_create_main_db()
-    tbl.filter_select_enabled = True
+    tbl.online = True
+    tbl.database = get_or_create_main_db()
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
 
     defaults = {
@@ -205,10 +215,10 @@ def load_world_bank_health_n_pop():
         "show_bubbles": True,
     }
 
-    print("Creating slices")
+    logging.info("Creating slices")
     slices = [
         Slice(
-            slice_name="Region Filter",
+            slice_name="筛选地区",
             viz_type='filter_box',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -217,7 +227,7 @@ def load_world_bank_health_n_pop():
                 viz_type='filter_box',
                 groupby=['region', 'country_name'])),
         Slice(
-            slice_name="World's Population",
+            slice_name="世界人口",
             viz_type='big_number',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -229,7 +239,7 @@ def load_world_bank_health_n_pop():
                 metric='sum__SP_POP_TOTL',
                 compare_suffix="over 10Y")),
         Slice(
-            slice_name="Most Populated Countries",
+            slice_name="人口数量排行",
             viz_type='table',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -239,7 +249,7 @@ def load_world_bank_health_n_pop():
                 metrics=["sum__SP_POP_TOTL"],
                 groupby=['country_name'])),
         Slice(
-            slice_name="Growth Rate",
+            slice_name="人口增长变化",
             viz_type='line',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -251,7 +261,7 @@ def load_world_bank_health_n_pop():
                 num_period_compare="10",
                 groupby=['country_name'])),
         Slice(
-            slice_name="% Rural",
+            slice_name="各国人口",
             viz_type='world_map',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -261,7 +271,7 @@ def load_world_bank_health_n_pop():
                 metric="sum__SP_RUR_TOTL_ZS",
                 num_period_compare="10")),
         Slice(
-            slice_name="Life Expectancy VS Rural %",
+            slice_name="各洲预期寿命",
             viz_type='bubble',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -271,7 +281,7 @@ def load_world_bank_health_n_pop():
                 since="2011-01-01",
                 until="2011-01-02",
                 series="region",
-                limit=0,
+                limit="0",
                 entity="country_name",
                 x="sum__SP_RUR_TOTL_ZS",
                 y="sum__SP_DYN_LE00_IN",
@@ -284,9 +294,9 @@ def load_world_bank_health_n_pop():
                         "TUV", "IMY", "KNA", "ASM", "ADO", "AMA", "PLW",
                     ],
                     "op": "not in"}],
-                )),
+            )),
         Slice(
-            slice_name="Rural Breakdown",
+            slice_name="各洲与各国人口",
             viz_type='sunburst',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -298,7 +308,7 @@ def load_world_bank_health_n_pop():
                 since="2011-01-01",
                 until="2011-01-01",)),
         Slice(
-            slice_name="World's Pop Growth",
+            slice_name="东亚人口变化趋势",
             viz_type='area',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -309,7 +319,7 @@ def load_world_bank_health_n_pop():
                 viz_type='area',
                 groupby=["region"],)),
         Slice(
-            slice_name="Box plot",
+            slice_name="东亚人口数量箱线图",
             viz_type='box_plot',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -321,7 +331,7 @@ def load_world_bank_health_n_pop():
                 viz_type='box_plot',
                 groupby=["region"],)),
         Slice(
-            slice_name="Treemap",
+            slice_name="各洲人口树状图",
             viz_type='treemap',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -333,7 +343,7 @@ def load_world_bank_health_n_pop():
                 metrics=["sum__SP_POP_TOTL"],
                 groupby=["region", "country_code"],)),
         Slice(
-            slice_name="Parallel Coordinates",
+            slice_name="人口数量平行坐标图",
             viz_type='para',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -352,12 +362,11 @@ def load_world_bank_health_n_pop():
     ]
     misc_dash_slices.append(slices[-1].slice_name)
     for slc in slices:
-        merge_slice(slc)
+        merge_slice(slc, user_id=user_id)
 
-    print("Creating a World's Health Bank dashboard")
-    dash_name = "World's Bank Data"
-    slug = "world_health"
-    dash = db.session.query(Dash).filter_by(slug=slug).first()
+    logging.info("Creating dashboard [世界人口]")
+    dash_name = "世界人口"
+    dash = db.session.query(Dash).filter_by(name=dash_name).first()
 
     if not dash:
         dash = Dash()
@@ -449,18 +458,19 @@ def load_world_bank_health_n_pop():
     for i, pos in enumerate(l):
         pos['slice_id'] = str(slices[i].id)
 
-    dash.dashboard_title = dash_name
+    dash.name = dash_name
     dash.position_json = json.dumps(l, indent=4)
-    dash.slug = slug
-
+    dash.online = True
     dash.slices = slices[:-1]
+    dash.created_by_fk = user_id
     db.session.merge(dash)
     db.session.commit()
+    Log.log_add(dash, 'dashboard', user_id)
 
 
-def load_css_templates():
+def load_css_templates(user_id=None):
     """Loads 2 css templates to demonstrate the feature"""
-    print('Creating default CSS templates')
+    logging.info('Creating default CSS templates')
     CSS = models.CssTemplate  # noqa
 
     obj = db.session.query(CSS).filter_by(template_name='Flat').first()
@@ -554,12 +564,14 @@ def load_css_templates():
     */
     """)
     obj.css = css
+    obj.created_by_fk = user_id
     db.session.merge(obj)
     db.session.commit()
 
 
-def load_birth_names():
+def load_birth_names(user_id=None):
     """Loading birth name dataset from a zip file in the repo"""
+    logging.info("Loading data into table [birth_names]")
     with gzip.open(os.path.join(DATA_FOLDER, 'birth_names.json.gz')) as f:
         pdf = pd.read_json(f)
     pdf.ds = pd.to_datetime(pdf.ds, unit='ms')
@@ -575,26 +587,25 @@ def load_birth_names():
             'name': String(255),
         },
         index=False)
-    l = []
-    print("Done loading table!")
-    print("-" * 80)
 
-    print("Creating table [birth_names] reference")
+    logging.info("Creating dataset [birth_names]")
     obj = db.session.query(TBL).filter_by(table_name='birth_names').first()
     if not obj:
-        obj = TBL(table_name='birth_names')
+        obj = TBL(dataset_name='新生婴儿统计',
+                  table_name='birth_names')
     obj.main_dttm_col = 'ds'
-    obj.database = utils.get_or_create_main_db()
+    obj.database = get_or_create_main_db()
     obj.filter_select_enabled = True
-
+    obj.online = True
+    obj.created_by_fk = user_id
     if not any(col.column_name == 'num_california' for col in obj.columns):
         obj.columns.append(TableColumn(
             column_name='num_california',
             expression="CASE WHEN state = 'CA' THEN num ELSE 0 END"
         ))
-
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
@@ -614,10 +625,10 @@ def load_birth_names():
         "markup_type": "markdown",
     }
 
-    print("Creating some slices")
+    logging.info("Creating slices")
     slices = [
         Slice(
-            slice_name="Girls",
+            slice_name="女孩姓名数量",
             viz_type='table',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -632,7 +643,7 @@ def load_birth_names():
                 row_limit=50,
                 timeseries_limit_metric='sum__num')),
         Slice(
-            slice_name="Boys",
+            slice_name="男孩姓名数量",
             viz_type='table',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -646,16 +657,16 @@ def load_birth_names():
                 }],
                 row_limit=50)),
         Slice(
-            slice_name="Participants",
+            slice_name="每年新生婴儿趋势图",
             viz_type='big_number',
             datasource_type='table',
             datasource_id=tbl.id,
             params=get_slice_json(
                 defaults,
-                viz_type="big_number", granularity_sqla="ds",
+                viz_type="big_number", granularity="ds",
                 compare_lag="5", compare_suffix="over 5Y")),
         Slice(
-            slice_name="Genders",
+            slice_name="性别比例",
             viz_type='pie',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -663,7 +674,7 @@ def load_birth_names():
                 defaults,
                 viz_type="pie", groupby=['gender'])),
         Slice(
-            slice_name="Genders by State",
+            slice_name="各州男女婴儿数量",
             viz_type='dist_bar',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -678,7 +689,7 @@ def load_birth_names():
                 metrics=['sum__sum_girls', 'sum__sum_boys'],
                 groupby=['state'])),
         Slice(
-            slice_name="Trends",
+            slice_name="每年名字数量趋势",
             viz_type='line',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -687,7 +698,7 @@ def load_birth_names():
                 viz_type="line", groupby=['name'],
                 granularity_sqla='ds', rich_tooltip=True, show_legend=True)),
         Slice(
-            slice_name="Average and Sum Trends",
+            slice_name="每年平均数量和总数的对比",
             viz_type='dual_line',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -696,7 +707,7 @@ def load_birth_names():
                 viz_type="dual_line", metric='avg__num', metric_2='sum__num',
                 granularity_sqla='ds')),
         Slice(
-            slice_name="Title",
+            slice_name="标题",
             viz_type='markup',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -708,13 +719,13 @@ def load_birth_names():
     <h1>Birth Names Dashboard</h1>
     <p>
         The source dataset came from
-        <a href="https://github.com/hadley/babynames" target="_blank">[here]</a>
+        <a href="https://github.com/hadley/babynames">[here]</a>
     </p>
     <img src="/static/assets/images/babytux.jpg">
 </div>
 """)),
         Slice(
-            slice_name="Name Cloud",
+            slice_name="热门名字",
             viz_type='word_cloud',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -724,7 +735,7 @@ def load_birth_names():
                 series='name', size_to="70", rotation="square",
                 limit='100')),
         Slice(
-            slice_name="Pivot Table",
+            slice_name="各州名字统计",
             viz_type='pivot_table',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -733,7 +744,7 @@ def load_birth_names():
                 viz_type="pivot_table", metrics=['sum__num'],
                 groupby=['name'], columns=['state'])),
         Slice(
-            slice_name="Number of Girls",
+            slice_name="女孩总数",
             viz_type='big_number_total',
             datasource_type='table',
             datasource_id=tbl.id,
@@ -813,10 +824,11 @@ def load_birth_names():
                 })),
     ]
     for slc in slices:
-        merge_slice(slc)
+        merge_slice(slc, user_id=user_id)
 
-    print("Creating a dashboard")
-    dash = db.session.query(Dash).filter_by(dashboard_title="Births").first()
+    logging.info("Creating dashboard [新生婴儿]")
+    dash_name = "新生婴儿"
+    dash = db.session.query(Dash).filter_by(name=dash_name).first()
 
     if not dash:
         dash = Dash()
@@ -908,16 +920,19 @@ def load_birth_names():
     l = json.loads(js)
     for i, pos in enumerate(l):
         pos['slice_id'] = str(slices[i].id)
-    dash.dashboard_title = "Births"
+    dash.name = dash_name
     dash.position_json = json.dumps(l, indent=4)
-    dash.slug = "births"
+    dash.online = True
     dash.slices = slices[:-1]
+    dash.created_by_fk = user_id
     db.session.merge(dash)
     db.session.commit()
+    Log.log_add(dash, 'dashboard', user_id)
 
 
-def load_unicode_test_data():
+def load_unicode_test_data(user_id=None):
     """Loading unicode test dataset from a csv file in the repo"""
+    logging.info("Loading data into table [unicode_test]")
     df = pd.read_csv(os.path.join(DATA_FOLDER, 'unicode_utf8_unixnl_test.csv'),
                      encoding="utf-8")
     # generate date/numeric data
@@ -936,17 +951,19 @@ def load_unicode_test_data():
             'value': Float(),
         },
         index=False)
-    print("Done loading table!")
-    print("-" * 80)
 
-    print("Creating table [unicode_test] reference")
+    logging.info("Creating dataset [unicode_test]")
     obj = db.session.query(TBL).filter_by(table_name='unicode_test').first()
     if not obj:
-        obj = TBL(table_name='unicode_test')
+        obj = TBL(dataset_name='unicode_test',
+                  table_name='unicode_test')
     obj.main_dttm_col = 'dttm'
-    obj.database = utils.get_or_create_main_db()
+    obj.database = get_or_create_main_db()
+    obj.online = False
+    obj.created_by_fk = user_id
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
@@ -966,7 +983,7 @@ def load_unicode_test_data():
         "limit": "100",
     }
 
-    print("Creating a slice")
+    logging.info("Creating a slice")
     slc = Slice(
         slice_name="Unicode Cloud",
         viz_type='word_cloud',
@@ -974,15 +991,11 @@ def load_unicode_test_data():
         datasource_id=tbl.id,
         params=get_slice_json(slice_data),
     )
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
-    print("Creating a dashboard")
-    dash = (
-        db.session.query(Dash)
-        .filter_by(dashboard_title="Unicode Test")
-        .first()
-    )
-
+    logging.info("Creating dashboard [Unicode Test]")
+    dash_name = "Unicode Test"
+    dash = db.session.query(Dash).filter_by(name=dash_name).first()
     if not dash:
         dash = Dash()
     pos = {
@@ -992,16 +1005,19 @@ def load_unicode_test_data():
         "row": 1,
         "slice_id": slc.id,
     }
-    dash.dashboard_title = "Unicode Test"
+    dash.name = dash_name
     dash.position_json = json.dumps([pos], indent=4)
-    dash.slug = "unicode-test"
+    dash.online = True
     dash.slices = [slc]
+    dash.created_by_fk = user_id
     db.session.merge(dash)
     db.session.commit()
+    Log.log_add(dash, 'dashboard', user_id)
 
 
-def load_random_time_series_data():
+def load_random_time_series_data(user_id=None):
     """Loading random time series data from a zip file in the repo"""
+    logging.info("Loading data into table [random_time_series]")
     with gzip.open(os.path.join(DATA_FOLDER, 'random_time_series.json.gz')) as f:
         pdf = pd.read_json(f)
     pdf.ds = pd.to_datetime(pdf.ds, unit='s')
@@ -1014,23 +1030,25 @@ def load_random_time_series_data():
             'ds': DateTime,
         },
         index=False)
-    print("Done loading table!")
-    print("-" * 80)
 
-    print("Creating table [random_time_series] reference")
+    logging.info("Creating dataset [random_time_series]")
     obj = db.session.query(TBL).filter_by(table_name='random_time_series').first()
     if not obj:
-        obj = TBL(table_name='random_time_series')
+        obj = TBL(dataset_name='随机时间序列',
+                  table_name='random_time_series')
     obj.main_dttm_col = 'ds'
-    obj.database = utils.get_or_create_main_db()
+    obj.database = get_or_create_main_db()
+    obj.online = True
+    obj.created_by_fk = user_id
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
     slice_data = {
         "granularity_sqla": "day",
-        "row_limit": config.get("ROW_LIMIT"),
+        "row_limit": config.get("SLICE_ROW_LIMIT"),
         "since": "1 year ago",
         "until": "now",
         "metric": "count",
@@ -1040,18 +1058,19 @@ def load_random_time_series_data():
         "subdomain_granularity": "day",
     }
 
-    print("Creating a slice")
+    logging.info("Creating a slice")
     slc = Slice(
-        slice_name="Calendar Heatmap",
+        slice_name='热力图',
+        description='基于随机时间序列数据',
         viz_type='cal_heatmap',
         datasource_type='table',
         datasource_id=tbl.id,
         params=get_slice_json(slice_data),
     )
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
 
-def load_country_map_data():
+def load_country_map_data(user_id=None):
     """Loading data for map with country map"""
     csv_path = os.path.join(DATA_FOLDER, 'birth_france_data_for_country_map.csv')
     data = pd.read_csv(csv_path, encoding="utf-8")
@@ -1078,16 +1097,18 @@ def load_country_map_data():
             'dttm': Date(),
         },
         index=False)
-    print("Done loading table!")
-    print("-" * 80)
-    print("Creating table reference")
+    logging.info("Creating dataset [birth_france_by_region]")
     obj = db.session.query(TBL).filter_by(table_name='birth_france_by_region').first()
     if not obj:
-        obj = TBL(table_name='birth_france_by_region')
+        obj = TBL(dataset_name='birth_france_by_region',
+                  table_name='birth_france_by_region')
     obj.main_dttm_col = 'dttm'
     obj.database = utils.get_or_create_main_db()
+    obj.online = True
+    obj.created_by_fk = user_id
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
@@ -1102,7 +1123,7 @@ def load_country_map_data():
         "row_limit": 500000,
     }
 
-    print("Creating a slice")
+    logging.info("Creating a slice")
     slc = Slice(
         slice_name="Birth in France by department in 2016",
         viz_type='country_map',
@@ -1114,8 +1135,9 @@ def load_country_map_data():
     merge_slice(slc)
 
 
-def load_long_lat_data():
+def load_long_lat_data(user_id=None):
     """Loading lat/long data from a csv file in the repo"""
+    logging.info("Loading data into table [long_lat]")
     with gzip.open(os.path.join(DATA_FOLDER, 'san_francisco.csv.gz')) as f:
         pdf = pd.read_csv(f, encoding="utf-8")
     start = datetime.datetime.now().replace(
@@ -1152,17 +1174,19 @@ def load_long_lat_data():
             'delimited': String(60),
         },
         index=False)
-    print("Done loading table!")
-    print("-" * 80)
 
-    print("Creating table reference")
+    logging.info("Creating dataset [long_lat]")
     obj = db.session.query(TBL).filter_by(table_name='long_lat').first()
     if not obj:
-        obj = TBL(table_name='long_lat')
+        obj = TBL(dataset_name='位置坐标',
+                  table_name='long_lat')
     obj.main_dttm_col = 'datetime'
-    obj.database = utils.get_or_create_main_db()
+    obj.database = get_or_create_main_db()
+    obj.online = True
+    obj.created_by_fk = user_id
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
@@ -1179,21 +1203,22 @@ def load_long_lat_data():
         "row_limit": 500000,
     }
 
-    print("Creating a slice")
+    logging.info("Creating a slice")
     slc = Slice(
-        slice_name="Mapbox Long/Lat",
+        slice_name="地理区域数量统计",
         viz_type='mapbox',
         datasource_type='table',
         datasource_id=tbl.id,
         params=get_slice_json(slice_data),
     )
     misc_dash_slices.append(slc.slice_name)
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)
 
 
-def load_multiformat_time_series_data():
+def load_multiformat_time_series_data(user_id=None):
 
     """Loading time series data from a zip file in the repo"""
+    logging.info("Loading data into table [multiformat_time_series]")
     with gzip.open(os.path.join(DATA_FOLDER, 'multiformat_time_series.json.gz')) as f:
         pdf = pd.read_json(f)
     pdf.ds = pd.to_datetime(pdf.ds, unit='s')
@@ -1214,14 +1239,16 @@ def load_multiformat_time_series_data():
             "string3": String(100),
         },
         index=False)
-    print("Done loading table!")
-    print("-" * 80)
-    print("Creating table [multiformat_time_series] reference")
+
+    logging.info("Creating dataset [multiformat_time_series]")
     obj = db.session.query(TBL).filter_by(table_name='multiformat_time_series').first()
     if not obj:
-        obj = TBL(table_name='multiformat_time_series')
+        obj = TBL(dataset_name='多种格式的时间序列',
+                  table_name='multiformat_time_series')
     obj.main_dttm_col = 'ds'
-    obj.database = utils.get_or_create_main_db()
+    obj.database = get_or_create_main_db()
+    obj.online = True
+    obj.created_by_fk = user_id
     dttm_and_expr_dict = {
         'ds': [None, None],
         'ds2': [None, None],
@@ -1239,15 +1266,16 @@ def load_multiformat_time_series_data():
         col.is_dttm = True
     db.session.merge(obj)
     db.session.commit()
+    Log.log_add(obj, 'dataset', user_id)
     obj.fetch_metadata()
     tbl = obj
 
-    print("Creating Heatmap charts")
-    for i, col in enumerate(tbl.columns):
+    logging.info("Creating some slices")
+    for i, col in enumerate(tbl.columns[:1]):
         slice_data = {
             "metrics": ['count'],
             "granularity_sqla": col.column_name,
-            "granularity_sqla": "day",
+            "granularity": "day",
             "row_limit": config.get("ROW_LIMIT"),
             "since": "1 year ago",
             "until": "now",
@@ -1258,23 +1286,79 @@ def load_multiformat_time_series_data():
         }
 
         slc = Slice(
-            slice_name="Calendar Heatmap multiformat " + str(i),
+            slice_name="时间热力图" + str(i),
+            description='时间列: ' + col.column_name,
             viz_type='cal_heatmap',
             datasource_type='table',
             datasource_id=tbl.id,
             params=get_slice_json(slice_data),
         )
-        merge_slice(slc)
+        merge_slice(slc, user_id=user_id)
     misc_dash_slices.append(slc.slice_name)
 
 
-def load_misc_dashboard():
-    """Loading a dashboard featuring misc charts"""
+def load_chinese_population(user_id=None):
+    """Load China map with population data"""
+    logging.info("Loading data into table [chinese_population]")
+    df = pd.read_csv(os.path.join(DATA_FOLDER, 'chinese_population.csv'),
+                     encoding="utf-8")
+    df.to_sql(
+        'chinese_population',
+        db.engine,
+        if_exists='replace',
+        chunksize=500,
+        dtype={
+            'id': Integer(),
+            'province': String(32),
+            'population': Integer(),
+            'area': Float(),
+        },
+        index=False)
 
-    print("Creating the dashboard")
+    logging.info("Creating dataset [chinese_population]")
+    tbl_name = 'chinese_population'
+    tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
+    if not tbl:
+        tbl = TBL(dataset_name='中国人口与面积', table_name=tbl_name)
+    tbl.online = True
+    tbl.database = get_or_create_main_db()
+    tbl.created_by_fk = user_id
+    db.session.merge(tbl)
+    db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
+    tbl.fetch_metadata()
+
+    logging.info("Creating a slice")
+    params_dict = {
+        "color_value_format": ".3s",
+        "datasource_id": tbl.id,
+        "datasource_name": "\u4e2d\u56fd\u4eba\u53e3",
+        "entity": "province",
+        "rename_color_metric": "\u9762\u79ef(\u4e07\u5e73\u65b9\u5343\u7c73)",
+        "secondary_metric": "sum__area",
+        "show_color_values": "y",
+        "show_colors": "y",
+        "viz_type": "chinese_map"}
+
+    slc = Slice(
+        slice_name="中国各区面积",
+        viz_type='chinese_map',
+        datasource_type='table',
+        datasource_id=tbl.id,
+        params=get_slice_json(params_dict),
+        online=True,
+        created_by_fk=user_id
+    )
+    merge_slice(slc, user_id=user_id)
+    misc_dash_slices.append(slc.slice_name)
+
+
+def load_misc_dashboard(user_id=None):
+    """Loading a dasbhoard featuring misc charts"""
+    logging.info("Creating dashboard [其他类型工作表]")
     db.session.expunge_all()
-    DASH_SLUG = "misc_charts"
-    dash = db.session.query(Dash).filter_by(slug=DASH_SLUG).first()
+    dash_name = "其他类型工作表"
+    dash = db.session.query(Dash).filter_by(name=dash_name).first()
 
     if not dash:
         dash = Dash()
@@ -1333,23 +1417,25 @@ def load_misc_dashboard():
     l = json.loads(js)
     slices = (
         db.session
-        .query(Slice)
-        .filter(Slice.slice_name.in_(misc_dash_slices))
-        .all()
+            .query(Slice)
+            .filter(Slice.slice_name.in_(misc_dash_slices))
+            .all()
     )
     slices = sorted(slices, key=lambda x: x.id)
     for i, pos in enumerate(l):
         pos['slice_id'] = str(slices[i].id)
-    dash.dashboard_title = "Misc Charts"
+    dash.name = dash_name
     dash.position_json = json.dumps(l, indent=4)
-    dash.slug = DASH_SLUG
+    dash.online = True
     dash.slices = slices
+    dash.created_by_fk = user_id
     db.session.merge(dash)
     db.session.commit()
+    Log.log_add(dash, 'dashboard', user_id)
 
 
-def load_deck_dash():
-    print("Loading deck.gl dashboard")
+def load_deck_dash(user_id=None):
+    logging.info("Loading deck.gl dashboard")
     slices = []
     tbl = db.session.query(TBL).filter_by(table_name='long_lat').first()
     slice_data = {
@@ -1389,7 +1475,7 @@ def load_deck_dash():
         "where": "",
     }
 
-    print("Creating Scatterplot slice")
+    logging.info("Creating Scatterplot slice")
     slc = Slice(
         slice_name="Scatterplot",
         viz_type='deck_scatter',
@@ -1437,7 +1523,7 @@ def load_deck_dash():
         "time_grain_sqla": None,
         "groupby": [],
     }
-    print("Creating Screen Grid slice")
+    logging.info("Creating Screen Grid slice")
     slc = Slice(
         slice_name="Screen grid",
         viz_type='deck_screengrid',
@@ -1486,7 +1572,7 @@ def load_deck_dash():
         "time_grain_sqla": None,
         "groupby": [],
     }
-    print("Creating Hex slice")
+    logging.info("Creating Hex slice")
     slc = Slice(
         slice_name="Hexagons",
         viz_type='deck_hex',
@@ -1535,7 +1621,7 @@ def load_deck_dash():
         "time_grain_sqla": None,
         "groupby": [],
     }
-    print("Creating Grid slice")
+    logging.info("Creating Grid slice")
     slc = Slice(
         slice_name="Grid",
         viz_type='deck_grid',
@@ -1547,7 +1633,7 @@ def load_deck_dash():
     slices.append(slc)
 
     polygon_tbl = db.session.query(TBL) \
-                    .filter_by(table_name='sf_population_polygons').first()
+        .filter_by(table_name='sf_population_polygons').first()
     slice_data = {
         "datasource": "11__table",
         "viz_type": "deck_polygon",
@@ -1606,7 +1692,7 @@ def load_deck_dash():
         "filters": []
     }
 
-    print("Creating Polygon slice")
+    logging.info("Creating Polygon slice")
     slc = Slice(
         slice_name="Polygons",
         viz_type='deck_polygon',
@@ -1665,7 +1751,7 @@ def load_deck_dash():
         "filters": []
     }
 
-    print("Creating Arc slice")
+    logging.info("Creating Arc slice")
     slc = Slice(
         slice_name="Arcs",
         viz_type='deck_arc',
@@ -1723,7 +1809,7 @@ def load_deck_dash():
         "filters": []
     }
 
-    print("Creating Path slice")
+    logging.info("Creating Path slice")
     slc = Slice(
         slice_name="Path",
         viz_type='deck_path',
@@ -1734,9 +1820,9 @@ def load_deck_dash():
     merge_slice(slc)
     slices.append(slc)
 
-    print("Creating a dashboard")
+    logging.info("Creating a dashboard")
     title = "deck.gl Demo"
-    dash = db.session.query(Dash).filter_by(dashboard_title=title).first()
+    dash = db.session.query(Dash).filter_by(name=title).first()
 
     if not dash:
         dash = Dash()
@@ -1803,16 +1889,20 @@ def load_deck_dash():
     l = json.loads(js)
     for i, pos in enumerate(l):
         pos['slice_id'] = str(slices[i].id)
-    dash.dashboard_title = title
+    dash.name = title
     dash.position_json = json.dumps(l, indent=4)
     dash.slug = "deck"
     dash.slices = slices
+    dash.online = True
+    dash.created_by_fk = user_id
     db.session.merge(dash)
     db.session.commit()
+    Log.log_add(dash, 'dashboard', user_id)
 
 
-def load_flights():
+def load_flights(user_id=None):
     """Loading random time series data from a zip file in the repo"""
+    logging.info("Creating dataset [flights]")
     tbl_name = 'flights'
     with gzip.open(os.path.join(DATA_FOLDER, 'fligth_data.csv.gz')) as f:
         pdf = pd.read_csv(f, encoding='latin-1')
@@ -1841,16 +1931,20 @@ def load_flights():
         index=False)
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name=tbl_name,
+                  table_name=tbl_name)
     tbl.description = "Random set of flights in the US"
     tbl.database = utils.get_or_create_main_db()
+    tbl.online = True
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
-    print("Done loading table!")
 
 
-def load_paris_iris_geojson():
+def load_paris_iris_geojson(user_id=None):
+    logging.info("Creating dataset [paris_iris_mapping]")
     tbl_name = 'paris_iris_mapping'
 
     with gzip.open(os.path.join(DATA_FOLDER, 'paris_iris.json.gz')) as f:
@@ -1869,18 +1963,22 @@ def load_paris_iris_geojson():
             'type': Text,
         },
         index=False)
-    print("Creating table {} reference".format(tbl_name))
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name=tbl_name,
+                  table_name=tbl_name)
     tbl.description = "Map of Paris"
     tbl.database = utils.get_or_create_main_db()
+    tbl.online = True
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
 
 
-def load_sf_population_polygons():
+def load_sf_population_polygons(user_id=None):
+    logging.info("Creating dataset [sf_population_polygons]")
     tbl_name = 'sf_population_polygons'
 
     with gzip.open(os.path.join(DATA_FOLDER, 'sf_population.json.gz')) as f:
@@ -1899,18 +1997,22 @@ def load_sf_population_polygons():
             'area': BigInteger,
         },
         index=False)
-    print("Creating table {} reference".format(tbl_name))
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name=tbl_name,
+                  table_name=tbl_name)
     tbl.description = "Population density of San Francisco"
     tbl.database = utils.get_or_create_main_db()
+    tbl.online = True
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
 
 
-def load_bart_lines():
+def load_bart_lines(user_id=None):
+    logging.info("Creating dataset [bart_lines]")
     tbl_name = 'bart_lines'
     with gzip.open(os.path.join(DATA_FOLDER, 'bart-lines.json.gz')) as f:
         df = pd.read_json(f, encoding='latin-1')
@@ -1929,24 +2031,28 @@ def load_bart_lines():
             'path_json': Text,
         },
         index=False)
-    print("Creating table {} reference".format(tbl_name))
     tbl = db.session.query(TBL).filter_by(table_name=tbl_name).first()
     if not tbl:
-        tbl = TBL(table_name=tbl_name)
+        tbl = TBL(dataset_name=tbl_name,
+                  table_name=tbl_name)
     tbl.description = "BART lines"
     tbl.database = utils.get_or_create_main_db()
+    tbl.online = True
+    tbl.created_by_fk = user_id
     db.session.merge(tbl)
     db.session.commit()
+    Log.log_add(tbl, 'dataset', user_id)
     tbl.fetch_metadata()
 
 
-def load_multi_line():
-    load_world_bank_health_n_pop()
-    load_birth_names()
+def load_multi_line(user_id=None):
+    # load_world_bank_health_n_pop()
+    # load_birth_names()
     ids = [
         row.id for row in
         db.session.query(Slice).filter(
-            Slice.slice_name.in_(['Growth Rate', 'Trends']))
+            #Slice.slice_name.in_(['Growth Rate', 'Trends']))
+            Slice.slice_name.in_(['人口增长变化', '每年名字数量趋势']))
     ]
 
     slc = Slice(
@@ -1965,4 +2071,4 @@ def load_multi_line():
     )
 
     misc_dash_slices.append(slc.slice_name)
-    merge_slice(slc)
+    merge_slice(slc, user_id=user_id)

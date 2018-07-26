@@ -268,18 +268,57 @@ def version(verbose):
 def load_examples(load_test_data, user_id=None):
     """Loads a set of Slices and Dashboards and a supporting dataset """
     logging.info("Loading examples into {}".format(db))
-    #data.load_css_templates()
+
+    data.load_css_templates(user_id=user_id)
+
+    logging.info('Loading energy related dataset')
     data.load_energy(user_id=user_id)
+
+    logging.info("Loading [World Bank's Health Nutrition and Population Stats]")
     data.load_world_bank_health_n_pop(user_id=user_id)
+
+    logging.info('Loading [Birth names]')
     data.load_birth_names(user_id=user_id)
+
+    logging.info('Loading [Random time series data]')
     data.load_random_time_series_data(user_id=user_id)
-    # data.load_long_lat_data(user_id=user_id)
-    data.load_chinese_population(user_id=user_id)
+
+    logging.info('Loading [Random long/lat data]')
+    data.load_long_lat_data(user_id=user_id)
+
+    # logging.info('Loading [chinese population]')
+    # data.load_chinese_population(user_id=user_id)
+
+    logging.info('Loading [Country Map data]')
+    data.load_country_map_data(user_id=user_id)
+
+    logging.info('Loading [Multiformat time series]')
     data.load_multiformat_time_series_data(user_id=user_id)
+
+    logging.info('Loading [Misc Charts] dashboard')
     data.load_misc_dashboard(user_id=user_id)
 
+    logging.info('Loading [Paris GeoJson]')
+    data.load_paris_iris_geojson(user_id=user_id)
+
+    logging.info('Loading [San Francisco population polygons]')
+    data.load_sf_population_polygons(user_id=user_id)
+
+    logging.info('Loading [Flights data]')
+    data.load_flights(user_id=user_id)
+
+    logging.info('Loading [BART lines]')
+    data.load_bart_lines(user_id=user_id)
+
+    logging.info('Loading [Multi Line]')
+    data.load_multi_line(user_id=user_id)
+
     if load_test_data:
+        logging.info('Loading [Unicode test data]')
         data.load_unicode_test_data(user_id=user_id)
+
+    logging.info('Loading DECK.gl demo')
+    data.load_deck_dash(user_id=user_id)
 
 
 @manager.option(
