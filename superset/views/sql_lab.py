@@ -108,7 +108,7 @@ class SQLLab(BaseSupersetView):
     @expose("/preview/<database_id>/<schema>/<table_name>/")
     def preview_table(self, database_id, schema, table_name):
         database = Database.get_object(database_id)
-        sql = database.select_sql(table_name, schema=schema, limit=100)
+        sql = database.select_star(table_name, schema=schema, limit=100)
         payload = sql_lab.execute_sql(database_id, sql, schema=schema)
         return json_response(data=payload)
 
@@ -116,7 +116,7 @@ class SQLLab(BaseSupersetView):
     @expose("/preview/<database_id>/<schema>/<table_name>/<column_name>/")
     def preview_column(self, database_id, schema, table_name, column_name):
         database = Database.get_object(database_id)
-        sql = database.select_sql(table_name, schema=schema, limit=100,
+        sql = database.select_star(table_name, schema=schema, limit=100,
                                   columns=[column_name, ])
         payload = sql_lab.execute_sql(database_id, sql, schema=schema)
         return json_response(data=payload)

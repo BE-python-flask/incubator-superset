@@ -200,7 +200,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         compiled = qry.compile(eng, compile_kwargs={"literal_binds": True})
         return '{}'.format(compiled)
 
-    def select_sql(self, table_name, schema=None, limit=100, show_cols=False,
+    def select_star(self, table_name, schema=None, limit=100, show_cols=False,
                    indent=True, latest_partition=True, cols=None):
         """Generates a ``select *`` statement in the proper dialect"""
         eng = self.get_sqla_engine(schema=schema)

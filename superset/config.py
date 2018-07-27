@@ -14,6 +14,10 @@ import json
 import os
 
 from flask_appbuilder.security.manager import AUTH_DB
+from superset.stats_logger import DummyStatsLogger
+
+# Realtime stats logger, a StatsD implementation exists
+STATS_LOGGER = DummyStatsLogger()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATA_DIR = os.path.join(os.path.expanduser('~'), 'pilot')
@@ -184,6 +188,12 @@ TABLE_NAMES_CACHE_CONFIG = {'CACHE_TYPE': 'null'}
 ENABLE_CORS = False
 CORS_OPTIONS = {}
 
+
+# CSV Options: key/value pairs that will be passed as argument to DataFrame.to_csv method
+# note: index option should not be overridden
+CSV_EXPORT = {
+    'encoding': 'utf-8',
+}
 
 # ---------------------------------------------------
 # List of viz_types not allowed in your environment

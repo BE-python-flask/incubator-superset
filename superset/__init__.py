@@ -28,6 +28,9 @@ from superset.check_license import check_license
 APP_DIR = os.path.dirname(__file__)
 CONFIG_MODULE = os.environ.get('SUPERSET_CONFIG', 'superset.config')
 
+with open(APP_DIR + '/static/assets/backendSync.json', 'r') as f:
+    frontend_config = json.load(f)
+
 app = Flask(__name__)
 app.config.from_object(CONFIG_MODULE)
 app.config['TEMPLATES_AUTO_RELOAD'] = True

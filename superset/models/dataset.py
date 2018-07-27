@@ -12,11 +12,11 @@ from distutils.util import strtobool
 from flask import g, Markup, escape
 from flask_babel import lazy_gettext as _
 from flask_appbuilder import Model
-
+import six
 import sqlalchemy as sqla
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, Text, Boolean,
-    DateTime, desc, asc, select, and_, UniqueConstraint
+    DateTime, desc, asc, select, and_, or_, UniqueConstraint
 )
 from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import make_transient
@@ -24,15 +24,17 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import table, literal_column, text, column
 from sqlalchemy.sql.expression import ColumnClause, TextAsFrom
 
-from superset import db, app, utils
-from superset.utils import wrap_clause_in_parens, DTTM_ALIAS
+from superset import db, app, utils, sm
+from superset.utils import DTTM_ALIAS
 from superset.exception import (
     ParameterException, PropertyException, DatabaseException, PermissionException,
     HDFSException
 )
 from superset.jinja_context import get_template_processor
+from .annotations import Annotation
 from .base import AuditMixinNullable, ImportMixin, Queryable, QueryResult, QueryStatus
 from .connection import Database, HDFSConnection
+from .datasource_base import BaseColumn, BaseMetric, BaseDatasource
 
 config = app.config
 
@@ -40,33 +42,56 @@ config = app.config
 FillterPattern = re.compile(r'''((?:[^,"']|"[^"]*"|'[^']*')+)''')
 
 
-class TableColumn(Model, AuditMixinNullable, ImportMixin):
+class AnnotationDatasource(BaseDatasource):
+    """ Dummy object so we can query annotations using 'Viz' objects just like
+        regular datasources.
+    """
+
+    cache_timeout = 0
+
+    def query(self, query_obj):
+        df = None
+        error_message = None
+        qry = db.session.query(Annotation)
+        qry = qry.filter(Annotation.layer_id == query_obj['filter'][0]['val'])
+        qry = qry.filter(Annotation.start_dttm >= query_obj['from_dttm'])
+        qry = qry.filter(Annotation.end_dttm <= query_obj['to_dttm'])
+        status = QueryStatus.SUCCESS
+        try:
+            df = pd.read_sql_query(qry.statement, db.engine)
+        except Exception as e:
+            status = QueryStatus.FAILED
+            logging.exception(e)
+            error_message = (
+                utils.error_msg_from_exception(e))
+        return QueryResult(
+            status=status,
+            df=df,
+            duration=0,
+            query='',
+            error_message=error_message)
+
+    def get_query_str(self, query_obj):
+        raise NotImplementedError()
+
+    def values_for_column(self, column_name, limit=10000):
+        raise NotImplementedError()
+
+
+class TableColumn(Model, BaseColumn):
 
     """ORM object for table columns, each table can have multiple columns"""
 
     __tablename__ = 'table_columns'
     model_type = 'column'
 
-    id = Column(Integer, primary_key=True)
     dataset_id = Column(Integer, ForeignKey('dataset.id'))
     ref_dataset = relationship(
         'Dataset',
         backref=backref('ref_columns', cascade='all, delete-orphan'),
         foreign_keys=[dataset_id])
-    column_name = Column(String(128), nullable=False)
-    verbose_name = Column(String(128))
     is_dttm = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    type = Column(String(32), default='')
-    groupby = Column(Boolean, default=False)
-    count_distinct = Column(Boolean, default=False)
-    sum = Column(Boolean, default=False)
-    avg = Column(Boolean, default=False)
-    max = Column(Boolean, default=False)
-    min = Column(Boolean, default=False)
-    filterable = Column(Boolean, default=True)
     expression = Column(Text, default='')
-    description = Column(Text, default='')
     python_date_format = Column(String(256))
     database_expression = Column(String(256))
 
@@ -74,17 +99,13 @@ class TableColumn(Model, AuditMixinNullable, ImportMixin):
         UniqueConstraint('column_name', 'dataset_id', name='column_name_dataset_uc'),
     )
 
-    int_types = ('INT', 'BIGINT', 'DECIMAL')
-    float_types = ('DOUBLE', 'FLOAT', 'NUMBER')
-    bool_types = ('BOOL', )
-    date_types = ('DATE', 'TIME', 'YEAR')
-    str_types = ('VARCHAR', 'STRING', 'CHAR')
     export_fields = (
         'dataset_id', 'column_name', 'verbose_name', 'is_dttm', 'is_active',
         'type', 'groupby', 'count_distinct', 'sum', 'avg', 'max', 'min',
         'filterable', 'expression', 'description', 'python_date_format',
         'database_expression'
     )
+    export_parent = 'dataset'
     temp_dataset = None
 
     def __repr__(self):
@@ -99,30 +120,6 @@ class TableColumn(Model, AuditMixinNullable, ImportMixin):
         return self.temp_dataset if self.temp_dataset else self.ref_dataset
 
     @property
-    def is_int(self):
-        return any([t in self.type.upper() for t in self.int_types])
-
-    @property
-    def is_float(self):
-        return any([t in self.type.upper() for t in self.float_types])
-
-    @property
-    def is_num(self):
-        return self.is_int or self.is_float
-
-    @property
-    def is_bool(self):
-        return any([t in self.type.upper() for t in self.bool_types])
-
-    @property
-    def is_time(self):
-        return any([t in self.type.upper() for t in self.date_types])
-
-    @property
-    def is_string(self):
-        return any([t in self.type.upper() for t in self.str_types])
-
-    @property
     def sqla_col(self):
         name = self.column_name
         if not self.expression:
@@ -131,29 +128,38 @@ class TableColumn(Model, AuditMixinNullable, ImportMixin):
             col = literal_column(self.expression).label(name)
         return col
 
+    @property
+    def datasource(self):
+        return self.table
+
     def get_time_filter(self, start_dttm, end_dttm):
         col = self.sqla_col.label('__time')
-        return and_(
-            col >= text(self.dttm_sql_literal(start_dttm)),
-            col <= text(self.dttm_sql_literal(end_dttm)),
-            )
+        l = []  # noqa: E741
+        if start_dttm:
+            l.append(col >= text(self.dttm_sql_literal(start_dttm)))
+        if end_dttm:
+            l.append(col <= text(self.dttm_sql_literal(end_dttm)))
+        return and_(*l)
 
     def get_timestamp_expression(self, time_grain):
         """Getting the time component of the query"""
+        pdf = self.python_date_format
+        is_epoch = pdf in ('epoch_s', 'epoch_ms')
+        if not self.expression and not time_grain and not is_epoch:
+            return column(self.column_name, type_=DateTime).label(DTTM_ALIAS)
+
         expr = self.expression or self.column_name
-        if not self.expression and not time_grain:
-            return column(expr, type_=DateTime).label(DTTM_ALIAS)
+        if is_epoch:
+            # if epoch, translate to DATE using db specific conf
+            db_spec = self.table.database.db_engine_spec
+            if pdf == 'epoch_s':
+                expr = db_spec.epoch_to_dttm().format(col=expr)
+            elif pdf == 'epoch_ms':
+                expr = db_spec.epoch_ms_to_dttm().format(col=expr)
         if time_grain:
-            pdf = self.python_date_format
-            if pdf in ('epoch_s', 'epoch_ms'):
-                # if epoch, translate to DATE using db specific conf
-                db_spec = self.dataset.database.db_engine_spec
-                if pdf == 'epoch_s':
-                    expr = db_spec.epoch_to_dttm().format(col=expr)
-                elif pdf == 'epoch_ms':
-                    expr = db_spec.epoch_ms_to_dttm().format(col=expr)
-            grain = self.dataset.database.grains_dict().get(time_grain, '{col}')
-            expr = grain.function.format(col=expr)
+            grain = self.table.database.grains_dict().get(time_grain)
+            if grain:
+                expr = grain.function.format(col=expr)
         return literal_column(expr, type_=DateTime).label(DTTM_ALIAS)
 
     def dttm_sql_literal(self, dttm):
@@ -165,40 +171,70 @@ class TableColumn(Model, AuditMixinNullable, ImportMixin):
         If database_expression is not empty, the internal dttm
         will be parsed as the sql sentence for the database to convert
         """
-
-        tf = self.python_date_format or '%Y-%m-%d %H:%M:%S.%f'
+        tf = self.python_date_format
         if self.database_expression:
             return self.database_expression.format(dttm.strftime('%Y-%m-%d %H:%M:%S'))
-        elif tf == 'epoch_s':
-            return str((dttm - datetime(1970, 1, 1)).total_seconds())
-        elif tf == 'epoch_ms':
-            return str((dttm - datetime(1970, 1, 1)).total_seconds() * 1000.0)
+        elif tf:
+            if tf == 'epoch_s':
+                return str((dttm - datetime(1970, 1, 1)).total_seconds())
+            elif tf == 'epoch_ms':
+                return str((dttm - datetime(1970, 1, 1)).total_seconds() * 1000.0)
+            return "'{}'".format(dttm.strftime(tf))
         else:
-            s = self.dataset.database.db_engine_spec.convert_dttm(
-                self.type, dttm)
-            return s or "'{}'".format(dttm.strftime(tf))
+            s = self.table.database.db_engine_spec.convert_dttm(
+                self.type or '', dttm)
+            return s or "'{}'".format(dttm.strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+    def get_metrics(self):
+        metrics = []
+        M = SqlMetric  # noqa
+        quoted = self.column_name
+        if self.sum:
+            metrics.append(M(
+                metric_name='sum__' + self.column_name,
+                metric_type='sum',
+                expression='SUM({})'.format(quoted),
+            ))
+        if self.avg:
+            metrics.append(M(
+                metric_name='avg__' + self.column_name,
+                metric_type='avg',
+                expression='AVG({})'.format(quoted),
+            ))
+        if self.max:
+            metrics.append(M(
+                metric_name='max__' + self.column_name,
+                metric_type='max',
+                expression='MAX({})'.format(quoted),
+            ))
+        if self.min:
+            metrics.append(M(
+                metric_name='min__' + self.column_name,
+                metric_type='min',
+                expression='MIN({})'.format(quoted),
+            ))
+        if self.count_distinct:
+            metrics.append(M(
+                metric_name='count_distinct__' + self.column_name,
+                metric_type='count_distinct',
+                expression='COUNT(DISTINCT {})'.format(quoted),
+            ))
+        return {m.metric_name: m for m in metrics}
 
 
-class SqlMetric(Model, AuditMixinNullable, ImportMixin):
+class SqlMetric(Model, BaseMetric):
 
     """ORM object for metrics, each table can have multiple metrics"""
 
     __tablename__ = 'sql_metrics'
     model_type = 'metric'
 
-    id = Column(Integer, primary_key=True)
-    metric_name = Column(String(128), nullable=False)
-    verbose_name = Column(String(128))
-    metric_type = Column(String(32))
     dataset_id = Column(Integer, ForeignKey('dataset.id'))
     ref_dataset = relationship(
         'Dataset',
         backref=backref('ref_metrics', cascade='all, delete-orphan'),
         foreign_keys=[dataset_id])
     expression = Column(Text)
-    description = Column(Text)
-    is_restricted = Column(Boolean, default=False, nullable=True)
-    d3format = Column(String(128))
 
     __table_args__ = (
         UniqueConstraint('metric_name', 'dataset_id', name='metric_name_dataset_uc'),
@@ -207,6 +243,7 @@ class SqlMetric(Model, AuditMixinNullable, ImportMixin):
     export_fields = (
         'metric_name', 'verbose_name', 'metric_type', 'dataset_id', 'expression',
         'description', 'is_restricted', 'd3format')
+    export_parent = 'dataset'
     temp_dataset = None
 
     def __repr__(self):
@@ -233,37 +270,34 @@ class SqlMetric(Model, AuditMixinNullable, ImportMixin):
                  parent_name=self.dataset.full_name) if self.dataset else None
 
 
-class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
+class Dataset(Model, BaseDatasource):
     """An ORM object for SqlAlchemy table references"""
     type = "table"
     __tablename__ = 'dataset'
     model_type = 'dataset'
+    query_language = 'sql'
     guardian_type = model_type.upper()
 
-    id = Column(Integer, primary_key=True)
     dataset_name = Column(String(128), nullable=False, unique=True)
     table_name = Column(String(128))
     schema = Column(String(128))
     sql = Column(Text)
-
     database_id = Column(Integer, ForeignKey('dbs.id'), nullable=True)
+    fetch_values_predicate = Column(String(1000))
+    user_id = Column(Integer, ForeignKey('ab_user.id'))
     database = relationship(
         'Database',
         backref=backref('dataset'),
         foreign_keys=[database_id])
-
-    user_id = Column(Integer, ForeignKey('ab_user.id'))
-    owner = relationship('User', backref='dataset', foreign_keys=[user_id])
+    owner = relationship(
+        'User',
+        backref='dataset',
+        foreign_keys=[user_id])
 
     online = Column(Boolean, default=False)
-    description = Column(Text)
-    filter_select_enabled = Column(Boolean, default=False)
     main_dttm_col = Column(String(128))
-    params = Column(Text)
-    offset = Column(Integer, default=0)
-    default_endpoint = Column(Text)
-    is_featured = Column(Boolean, default=False)
-    cache_timeout = Column(Integer)
+    is_sqllab_view = Column(Boolean, default=False)
+    template_params = Column(Text)
 
     __table_args__ = (
         UniqueConstraint('dataset_name', name='dataset_name_uc'),
@@ -275,12 +309,24 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
     temp_columns = []      # for creating slice with source table
     temp_metrics = []
     export_fields = (
-        'dataset_name', 'table_name', 'schema', 'sql', 'description', 'online',
-        'main_dttm_col', 'database_id',  'params')
+        'table_name', 'main_dttm_col', 'description', 'default_endpoint',
+        'database_id', 'offset', 'cache_timeout', 'schema',
+        'sql', 'params', 'template_params')
+    export_parent = 'database'
+    export_children = ['metrics', 'columns']
 
     dataset_types = Database.database_types
     filter_types = dataset_types
     addable_types = ['DATABASE']
+
+    sqla_aggregations = {
+        'COUNT_DISTINCT': lambda column_name: sqla.func.COUNT(sqla.distinct(column_name)),
+        'COUNT': sqla.func.COUNT,
+        'SUM': sqla.func.SUM,
+        'AVG': sqla.func.AVG,
+        'MIN': sqla.func.MIN,
+        'MAX': sqla.func.MAX,
+    }
 
     def __repr__(self):
         return self.dataset_name
@@ -339,10 +385,9 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
     @property
     def schema_perm(self):
         """Returns schema permission if present, database one otherwise."""
-        return utils.get_schema_perm(self.database, self.schema)
+        return sm.get_schema_perm(self.database, self.schema)
 
-    @property
-    def perm(self):
+    def get_perm(self):
         return "[{obj.database}].[{obj.dataset_name}](id:{obj.id})".format(obj=self)
 
     @property
@@ -387,11 +432,6 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
                 "table-condensed"))
 
     @property
-    def metrics_combo(self):
-        return sorted([(m.metric_name, m.metric_name) for m in self.metrics],
-                      key=lambda x: x[1])
-
-    @property
     def sql_url(self):
         return self.database.sql_url + "?table_name=" + str(self.table_name)
 
@@ -408,96 +448,172 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             if col_name == col.column_name:
                 return col
 
-    def preview_data(self, limit=100):
-        tbl = table(self.table_name)
-        if self.schema:
-            tbl.schema = self.schema
-        if self.sql:
-            tbl = TextAsFrom(sqla.text(self.sql), []).alias('expr_qry')
-        qry = select("*").select_from(tbl).limit(limit)
-        engine = self.database.get_sqla_engine()
-        sql = str(qry.compile(engine, compile_kwargs={"literal_binds": True},))
+    @property
+    def data(self):
+        d = super(Dataset, self).data
+        if self.type == 'table':
+            grains = self.database.grains() or []
+            if grains:
+                grains = [(g.duration, g.name) for g in grains]
+            d['granularity_sqla'] = utils.choicify(self.dttm_cols)
+            d['time_grain_sqla'] = grains
+        return d
 
-        df = pd.read_sql(sql, con=engine)
-        df = df.replace({numpy.nan: 'None'})
-        columns = list(df.columns)
-        types = []
-        if self.table_name:
-            tb = self.get_sqla_table_object()
-            col_types = {col.name: str(col.type) for col in tb.columns}
-            types = [col_types.get(c) for c in columns]
-        return {'columns': columns,
-               'types': types,
-               'records': df.to_dict(orient='records')}
-
-    def values_for_column(self, column_name, from_dttm, to_dttm, limit=500):
+    def values_for_column(self, column_name, limit=500):
         """Runs query against sqla to retrieve some
         sample values for the given column.
         """
-        granularity = self.main_dttm_col
-
         cols = {col.column_name: col for col in self.columns}
         target_col = cols[column_name]
+        tp = self.get_template_processor()
+        db_engine_spec = self.database.db_engine_spec
 
-        tbl = table(self.table_name)
-        qry = select([target_col.sqla_col])
-        qry = qry.select_from(tbl)
-        qry = qry.distinct(column_name)
-        qry = qry.limit(limit)
+        qry = (
+            select([target_col.sqla_col])
+                .select_from(self.get_from_clause(tp, db_engine_spec))
+                .distinct()
+        )
+        if limit:
+            qry = qry.limit(limit)
 
-        if granularity:
-            dttm_col = cols[granularity]
-            timestamp = dttm_col.sqla_col.label('timestamp')
-            time_filter = [
-                timestamp >= text(dttm_col.dttm_sql_literal(from_dttm)),
-                timestamp <= text(dttm_col.dttm_sql_literal(to_dttm)),
-                ]
-            qry = qry.where(and_(*time_filter))
+        if self.fetch_values_predicate:
+            tp = self.get_template_processor()
+            qry = qry.where(tp.process_template(self.fetch_values_predicate))
 
         engine = self.database.get_sqla_engine()
-        sql = "{}".format(
+        sql = '{}'.format(
+            qry.compile(engine, compile_kwargs={'literal_binds': True}),
+        )
+
+        df = pd.read_sql_query(sql=sql, con=engine)
+        return [row[0] for row in df.to_records(index=False)]
+
+    def get_template_processor(self, **kwargs):
+        return get_template_processor(
+            table=self, database=self.database, **kwargs)
+
+    def get_query_str(self, query_obj):
+        engine = self.database.get_sqla_engine()
+        qry = self.get_sqla_query(**query_obj)
+        sql = six.text_type(
             qry.compile(
-                engine, compile_kwargs={"literal_binds": True}, ),
+                engine,
+                compile_kwargs={'literal_binds': True},
+            ),
         )
+        logging.info(sql)
+        sql = sqlparse.format(sql, reindent=True)
+        if query_obj['is_prequery']:
+            query_obj['prequeries'].append(sql)
+        return sql
 
-        return pd.read_sql_query(
-            sql=sql,
-            con=engine
-        )
+    def get_sqla_table(self):
+        tbl = table(self.table_name)
+        if self.schema:
+            tbl.schema = self.schema
+        return tbl
 
-    def query(self, groupby, metrics, granularity, from_dttm, to_dttm,
-              filter=None, is_timeseries=True, timeseries_limit=None,
-              timeseries_limit_metric=None, row_limit=None, inner_from_dttm=None,
-              inner_to_dttm=None, orderby=None, extras=None, columns=None):
+    def get_from_clause(self, template_processor=None, db_engine_spec=None):
+        # Supporting arbitrary SQL statements in place of tables
+        if self.sql:
+            from_sql = self.sql
+            if template_processor:
+                from_sql = template_processor.process_template(from_sql)
+            from_sql = sqlparse.format(from_sql, strip_comments=True)
+            return TextAsFrom(sqla.text(from_sql), []).alias('expr_qry')
+        return self.get_sqla_table()
+
+    def adhoc_metric_to_sa(self, metric, cols):
+        """
+        Turn an adhoc metric into a sqlalchemy column.
+
+        :param dict metric: Adhoc metric definition
+        :param dict cols: Columns for the current table
+        :returns: The metric defined as a sqlalchemy column
+        :rtype: sqlalchemy.sql.column
+        """
+        expressionType = metric.get('expressionType')
+        if expressionType == utils.ADHOC_METRIC_EXPRESSION_TYPES['SIMPLE']:
+            column_name = metric.get('column').get('column_name')
+            sa_column = column(column_name)
+            table_column = cols.get(column_name)
+
+            if table_column:
+                sa_column = table_column.sqla_col
+
+            sa_metric = self.sqla_aggregations[metric.get('aggregate')](sa_column)
+            sa_metric = sa_metric.label(metric.get('label'))
+            return sa_metric
+        elif expressionType == utils.ADHOC_METRIC_EXPRESSION_TYPES['SQL']:
+            sa_metric = literal_column(metric.get('sqlExpression'))
+            sa_metric = sa_metric.label(metric.get('label'))
+            return sa_metric
+        else:
+            return None
+
+    def get_sqla_query(  # sqla
+            self,
+            groupby, metrics,
+            granularity,
+            from_dttm, to_dttm,
+            filter=None,  # noqa
+            is_timeseries=True,
+            timeseries_limit=15,
+            timeseries_limit_metric=None,
+            row_limit=None,
+            inner_from_dttm=None,
+            inner_to_dttm=None,
+            orderby=None,
+            extras=None,
+            columns=None,
+            order_desc=True,
+            prequeries=None,
+            is_prequery=False,
+    ):
         """Querying any sqla table from this common interface"""
-        template_processor = get_template_processor(
-            table=self, database=self.database)
+        template_kwargs = {
+            'from_dttm': from_dttm,
+            'groupby': groupby,
+            'metrics': metrics,
+            'row_limit': row_limit,
+            'to_dttm': to_dttm,
+            'filter': filter,
+            'columns': {col.column_name: col for col in self.columns},
+        }
+        template_kwargs.update(self.template_params_dict)
+        template_processor = self.get_template_processor(**template_kwargs)
+        db_engine_spec = self.database.db_engine_spec
+
+        orderby = orderby or []
 
         # For backward compatibility
         if granularity not in self.dttm_cols:
             granularity = self.main_dttm_col
 
+        # Database spec supports join-free timeslot grouping
+        time_groupby_inline = db_engine_spec.time_groupby_inline
+
         cols = {col.column_name: col for col in self.columns}
         metrics_dict = {m.metric_name: m for m in self.metrics}
-        qry_start_dttm = datetime.now()
 
         if not granularity and is_timeseries:
-            raise ParameterException(_(
-                "Datetime column not provided as part table configuration "
-                "and is required by this type of chart"))
+            raise Exception(_(
+                'Datetime column not provided as part table configuration '
+                'and is required by this type of chart'))
+        if not groupby and not metrics and not columns:
+            raise Exception(_('Empty query?'))
+        metrics_exprs = []
         for m in metrics:
-            if m not in metrics_dict:
-                raise ParameterException(_("Metric [{m}] is not valid".format(m)))
-        metrics_exprs = [metrics_dict.get(m).sqla_col for m in metrics]
-        timeseries_limit_metric = metrics_dict.get(timeseries_limit_metric)
-        timeseries_limit_metric_expr = None
-        if timeseries_limit_metric:
-            timeseries_limit_metric_expr = \
-                timeseries_limit_metric.sqla_col
-        if metrics:
+            if utils.is_adhoc_metric(m):
+                metrics_exprs.append(self.adhoc_metric_to_sa(m, cols))
+            elif m in metrics_dict:
+                metrics_exprs.append(metrics_dict.get(m).sqla_col)
+            else:
+                raise Exception(_("Metric '{}' is not valid".format(m)))
+        if metrics_exprs:
             main_metric_expr = metrics_exprs[0]
         else:
-            main_metric_expr = literal_column("COUNT(*)").label("ccount")
+            main_metric_expr = literal_column('COUNT(*)').label('ccount')
 
         select_exprs = []
         groupby_exprs = []
@@ -521,129 +637,194 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             metrics_exprs = []
 
         if granularity:
-
-            @compiles(ColumnClause)
-            def visit_column(element, compiler, **kw):
-                """Patch for sqlalchemy bug
-
-                TODO: sqlalchemy 1.2 release should be doing this on its own.
-                Patch only if the column clause is specific for DateTime
-                set and granularity is selected.
-                """
-                text = compiler.visit_column(element, **kw)
-                try:
-                    if (
-                                    element.is_literal and
-                                    hasattr(element.type, 'python_type') and
-                                    type(element.type) is DateTime
-                    ):
-                        text = text.replace('%%', '%')
-                except NotImplementedError:
-                    # Some elements raise NotImplementedError for python_type
-                    pass
-                return text
-
             dttm_col = cols[granularity]
             time_grain = extras.get('time_grain_sqla')
+            time_filters = []
 
             if is_timeseries:
                 timestamp = dttm_col.get_timestamp_expression(time_grain)
                 select_exprs += [timestamp]
                 groupby_exprs += [timestamp]
 
-            time_filter = dttm_col.get_time_filter(from_dttm, to_dttm)
+            # Use main dttm column to support index with secondary dttm columns
+            if db_engine_spec.time_secondary_columns and \
+                            self.main_dttm_col in self.dttm_cols and \
+                            self.main_dttm_col != dttm_col.column_name:
+                time_filters.append(cols[self.main_dttm_col].
+                                    get_time_filter(from_dttm, to_dttm))
+            time_filters.append(dttm_col.get_time_filter(from_dttm, to_dttm))
 
         select_exprs += metrics_exprs
-        qry = select(select_exprs)
+        qry = sqla.select(select_exprs)
 
-        tbl = table(self.table_name)
-        if self.schema:
-            tbl.schema = self.schema
-
-        # Supporting arbitrary SQL statements in place of tables
-        if self.sql:
-            tbl = TextAsFrom(sqla.text(self.sql), []).alias('expr_qry')
+        tbl = self.get_from_clause(template_processor, db_engine_spec)
 
         if not columns:
             qry = qry.group_by(*groupby_exprs)
 
         where_clause_and = []
         having_clause_and = []
-        for col, op, eq in filter:
-            col_obj = cols[col]
-            if op in ('in', 'not in'):
-                splitted = FillterPattern.split(eq)[1::2]
-                values = [types.replace("'", '').strip() for types in splitted]
-                cond = col_obj.sqla_col.in_(values)
-                if op == 'not in':
-                    cond = ~cond
-                where_clause_and.append(cond)
+        for flt in filter:
+            if not all([flt.get(s) for s in ['col', 'op']]):
+                continue
+            col = flt['col']
+            op = flt['op']
+            col_obj = cols.get(col)
+            if col_obj:
+                is_list_target = op in ('in', 'not in')
+                eq = self.filter_values_handler(
+                    flt.get('val'),
+                    target_column_is_numeric=col_obj.is_num,
+                    is_list_target=is_list_target)
+                if op in ('in', 'not in'):
+                    cond = col_obj.sqla_col.in_(eq)
+                    if '<NULL>' in eq:
+                        cond = or_(cond, col_obj.sqla_col == None)  # noqa
+                    if op == 'not in':
+                        cond = ~cond
+                    where_clause_and.append(cond)
+                else:
+                    if col_obj.is_num:
+                        eq = utils.string_to_num(flt['val'])
+                    if op == '==':
+                        where_clause_and.append(col_obj.sqla_col == eq)
+                    elif op == '!=':
+                        where_clause_and.append(col_obj.sqla_col != eq)
+                    elif op == '>':
+                        where_clause_and.append(col_obj.sqla_col > eq)
+                    elif op == '<':
+                        where_clause_and.append(col_obj.sqla_col < eq)
+                    elif op == '>=':
+                        where_clause_and.append(col_obj.sqla_col >= eq)
+                    elif op == '<=':
+                        where_clause_and.append(col_obj.sqla_col <= eq)
+                    elif op == 'LIKE':
+                        where_clause_and.append(col_obj.sqla_col.like(eq))
+                    elif op == 'IS NULL':
+                        where_clause_and.append(col_obj.sqla_col == None)  # noqa
+                    elif op == 'IS NOT NULL':
+                        where_clause_and.append(col_obj.sqla_col != None)  # noqa
         if extras:
             where = extras.get('where')
             if where:
-                where_clause_and += [wrap_clause_in_parens(
-                    template_processor.process_template(where))]
+                where = template_processor.process_template(where)
+                where_clause_and += [sqla.text('({})'.format(where))]
             having = extras.get('having')
             if having:
-                having_clause_and += [wrap_clause_in_parens(
-                    template_processor.process_template(having))]
+                having = template_processor.process_template(having)
+                having_clause_and += [sqla.text('({})'.format(having))]
         if granularity:
-            qry = qry.where(and_(*([time_filter] + where_clause_and)))
+            qry = qry.where(and_(*(time_filters + where_clause_and)))
         else:
             qry = qry.where(and_(*where_clause_and))
         qry = qry.having(and_(*having_clause_and))
-        if groupby:
-            qry = qry.order_by(desc(main_metric_expr))
-        elif orderby:
-            for col, ascending in orderby:
-                direction = asc if ascending else desc
-                qry = qry.order_by(direction(col))
 
-        if timeseries_limit and 0 < timeseries_limit < row_limit:
-            row_limit = timeseries_limit
-        qry = qry.limit(row_limit)
+        if not orderby and not columns:
+            orderby = [(main_metric_expr, not order_desc)]
 
-        if is_timeseries and timeseries_limit and groupby:
-            # some sql dialects require for order by expressions
-            # to also be in the select clause
-            inner_select_exprs += [main_metric_expr]
-            subq = select(inner_select_exprs)
-            subq = subq.select_from(tbl)
-            inner_time_filter = dttm_col.get_time_filter(
-                inner_from_dttm or from_dttm,
-                inner_to_dttm or to_dttm,
-                )
-            subq = subq.where(and_(*(where_clause_and + [inner_time_filter])))
-            subq = subq.group_by(*inner_groupby_exprs)
-            ob = main_metric_expr
-            if timeseries_limit_metric_expr is not None:
-                ob = timeseries_limit_metric_expr
-            subq = subq.order_by(desc(ob))
-            subq = subq.limit(timeseries_limit)
-            on_clause = []
-            for i, gb in enumerate(groupby):
-                on_clause.append(
-                    groupby_exprs[i] == column(gb + '__'))
+        for col, ascending in orderby:
+            direction = asc if ascending else desc
+            if utils.is_adhoc_metric(col):
+                col = self.adhoc_metric_to_sa(col, cols)
+            qry = qry.order_by(direction(col))
 
-            tbl = tbl.join(subq.alias(), and_(*on_clause))
+        if row_limit:
+            qry = qry.limit(row_limit)
 
-        qry = qry.select_from(tbl)
+        if is_timeseries and \
+                timeseries_limit and groupby and not time_groupby_inline:
+            if self.database.db_engine_spec.inner_joins:
+                # some sql dialects require for order by expressions
+                # to also be in the select clause -- others, e.g. vertica,
+                # require a unique inner alias
+                inner_main_metric_expr = main_metric_expr.label('mme_inner__')
+                inner_select_exprs += [inner_main_metric_expr]
+                subq = select(inner_select_exprs)
+                subq = subq.select_from(tbl)
+                inner_time_filter = dttm_col.get_time_filter(
+                    inner_from_dttm or from_dttm,
+                    inner_to_dttm or to_dttm,
+                    )
+                subq = subq.where(and_(*(where_clause_and + [inner_time_filter])))
+                subq = subq.group_by(*inner_groupby_exprs)
 
-        engine = self.database.get_sqla_engine(self.schema)
-        sql = "{}".format(
-            qry.compile(
-                engine, compile_kwargs={"literal_binds": True},),
-        )
-        sql = sqlparse.format(sql, reindent=True)
-        logging.info(sql)
+                ob = inner_main_metric_expr
+                if timeseries_limit_metric:
+                    if utils.is_adhoc_metric(timeseries_limit_metric):
+                        ob = self.adhoc_metric_to_sa(timeseries_limit_metric, cols)
+                    elif timeseries_limit_metric in metrics_dict:
+                        timeseries_limit_metric = metrics_dict.get(
+                            timeseries_limit_metric,
+                        )
+                        ob = timeseries_limit_metric.sqla_col
+                    else:
+                        raise Exception(_("Metric '{}' is not valid".format(m)))
+                direction = desc if order_desc else asc
+                subq = subq.order_by(direction(ob))
+                subq = subq.limit(timeseries_limit)
+
+                on_clause = []
+                for i, gb in enumerate(groupby):
+                    on_clause.append(
+                        groupby_exprs[i] == column(gb + '__'))
+
+                tbl = tbl.join(subq.alias(), and_(*on_clause))
+            else:
+                # run subquery to get top groups
+                subquery_obj = {
+                    'prequeries': prequeries,
+                    'is_prequery': True,
+                    'is_timeseries': False,
+                    'row_limit': timeseries_limit,
+                    'groupby': groupby,
+                    'metrics': metrics,
+                    'granularity': granularity,
+                    'from_dttm': inner_from_dttm or from_dttm,
+                    'to_dttm': inner_to_dttm or to_dttm,
+                    'filter': filter,
+                    'orderby': orderby,
+                    'extras': extras,
+                    'columns': columns,
+                    'order_desc': True,
+                }
+                result = self.query(subquery_obj)
+                dimensions = [c for c in result.df.columns if c not in metrics]
+                top_groups = self._get_top_groups(result.df, dimensions)
+                qry = qry.where(top_groups)
+
+        return qry.select_from(tbl)
+
+    def _get_top_groups(self, df, dimensions):
+        cols = {col.column_name: col for col in self.columns}
+        groups = []
+        for unused, row in df.iterrows():
+            group = []
+            for dimension in dimensions:
+                col_obj = cols.get(dimension)
+                group.append(col_obj.sqla_col == row[dimension])
+            groups.append(and_(*group))
+
+        return or_(*groups)
+
+    def query(self, query_obj):
+        qry_start_dttm = datetime.now()
+        sql = self.get_query_str(query_obj)
         status = QueryStatus.SUCCESS
         error_message = None
         df = None
         try:
-            df = pd.read_sql_query(sql, con=engine)
+            df = self.database.get_df(sql, self.schema)
         except Exception as e:
             status = QueryStatus.FAILED
-            error_message = str(e)
+            logging.exception(e)
+            error_message = (
+                self.database.db_engine_spec.extract_error_message(e))
+
+        # if this is a main query with prequeries, combine them together
+        if not query_obj['is_prequery']:
+            query_obj['prequeries'].append(sql)
+            sql = ';\n\n'.join(query_obj['prequeries'])
+        sql += ';'
 
         return QueryResult(
             status=status,
@@ -651,6 +832,28 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             duration=datetime.now() - qry_start_dttm,
             query=sql,
             error_message=error_message)
+
+    def preview_data(self, limit=100):
+        tbl = table(self.table_name)
+        if self.schema:
+            tbl.schema = self.schema
+        if self.sql:
+            tbl = TextAsFrom(sqla.text(self.sql), []).alias('expr_qry')
+        qry = select("*").select_from(tbl).limit(limit)
+        engine = self.database.get_sqla_engine()
+        sql = str(qry.compile(engine, compile_kwargs={"literal_binds": True},))
+
+        df = pd.read_sql(sql, con=engine)
+        df = df.replace({numpy.nan: 'None'})
+        columns = list(df.columns)
+        types = []
+        if self.table_name:
+            tb = self.get_sqla_table_object()
+            col_types = {col.name: str(col.type) for col in tb.columns}
+            types = [col_types.get(c) for c in columns]
+        return {'columns': columns,
+                'types': types,
+                'records': df.to_dict(orient='records')}
 
     def drop_temp_view(self, engine, view_name):
         drop_view = "DROP VIEW {}".format(view_name)
@@ -678,7 +881,7 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             else:
                 return self.database.get_table(self.table_name, schema=self.schema)
         except sqla.exc.DBAPIError as e:
-            err = _("Drop or create temporary view by sql failed: {msg}")\
+            err = _("Drop or create temporary view by sql failed: {msg}") \
                 .format(msg=str(e))
             logging.error(err)
             raise DatabaseException(err)
@@ -686,7 +889,7 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             raise DatabaseException(_(
                 "Couldn't fetch table [{table}]'s information in the specified "
                 "database [{schema}]")
-                .format(table=self.table_name, schema=self.schema) + ": " + str(e))
+                                    .format(table=self.table_name, schema=self.schema) + ": " + str(e))
 
     @classmethod
     def temp_dataset(cls, database_id, full_tb_name, need_columns=True):
@@ -777,37 +980,7 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             else:
                 columns.append(dbcol)
 
-            quoted = "{}".format(column(dbcol.column_name).compile(dialect=db_dialect))
-            if dbcol.sum:
-                metrics.append(SqlMetric(
-                    metric_name='sum__' + dbcol.column_name,
-                    metric_type='sum',
-                    expression="SUM({})".format(quoted)
-                ))
-            if dbcol.avg:
-                metrics.append(SqlMetric(
-                    metric_name='avg__' + dbcol.column_name,
-                    metric_type='avg',
-                    expression="AVG({})".format(quoted)
-                ))
-            if dbcol.max:
-                metrics.append(SqlMetric(
-                    metric_name='max__' + dbcol.column_name,
-                    metric_type='max',
-                    expression="MAX({})".format(quoted)
-                ))
-            if dbcol.min:
-                metrics.append(SqlMetric(
-                    metric_name='min__' + dbcol.column_name,
-                    metric_type='min',
-                    expression="MIN({})".format(quoted)
-                ))
-            if dbcol.count_distinct:
-                metrics.append(SqlMetric(
-                    metric_name='count_distinct__' + dbcol.column_name,
-                    metric_type='count_distinct',
-                    expression="COUNT(DISTINCT {})".format(quoted)
-                ))
+            metrics += dbcol.get_metrics().values()
 
         metrics.append(SqlMetric(
             metric_name='count(*)',
@@ -958,6 +1131,22 @@ class Dataset(Model, Queryable, AuditMixinNullable, ImportMixin):
             elif policy == cls.Policy.SKIP:
                 logging.info('Importing dataset: [{}] (skip)'.format(i_dataset))
         return new_dataset
+
+    @classmethod
+    def query_datasources_by_name(
+            cls, session, database, datasource_name, schema=None):
+        query = (
+            session.query(cls)
+                .filter_by(database_id=database.id)
+                .filter_by(table_name=datasource_name)
+        )
+        if schema:
+            query = query.filter_by(schema=schema)
+        return query.all()
+
+    @staticmethod
+    def default_query(qry):
+        return qry.filter_by(is_sqllab_view=False)
 
 
 class HDFSTable(Model, AuditMixinNullable, ImportMixin):

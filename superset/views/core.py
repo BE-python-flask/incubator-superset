@@ -1,39 +1,138 @@
 import json
 import logging
+import pandas as pd
 import sys
+import time
+import traceback
 import zlib
 from datetime import datetime, timedelta
-from flask import g, request, redirect, flash, Response, Markup
+from flask import (
+    g, request, redirect, flash, Response, Markup, url_for, render_template
+)
+from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
 from flask_appbuilder.models.sqla.interface import SQLAInterface
-from sqlalchemy import create_engine
+import sqlalchemy as sqla
+from sqlalchemy import and_, create_engine, or_, update
+from sqlalchemy.engine.url import make_url
+from urllib import parse
 from urllib.parse import quote
+from werkzeug.routing import BaseConverter
 
-from superset import app, db, sql_lab, results_backend, viz, utils
-from superset.timeout_decorator import connection_timeout
-from superset.source_registry import SourceRegistry
-from superset.sql_parse import SupersetQuery
-from superset.message import *
+from superset import app, db, appbuilder, sql_lab, results_backend, viz, utils
+from superset import sm as security_manager
+from superset import simple_cache as cache
 from superset.exception import (
-    ParameterException, PropertyException, DatabaseException, ErrorRequestException,
+    PropertyException, DatabaseException, ErrorRequestException,
+    SupersetException, PermissionException
 )
+from superset.jinja_context import get_template_processor
+from superset.legacy import cast_form_data
+from superset.message import *
 from superset.models import (
     Database, Dataset, Slice, Dashboard, TableColumn, SqlMetric, Query, Log,
-    FavStar, str_to_model, Number, Url, KeyValue, CssTemplate
+    FavStar, str_to_model, Number, Url, KeyValue, CssTemplate, DatasourceAccessRequest,
+    AnnotationDatasource
 )
+from superset.utils import merge_extra_filters, merge_request_params
+from superset.source_registry import SourceRegistry
+from superset.sql_parse import SupersetQuery
+from superset.timeout_decorator import connection_timeout
+
 from .base import (
     BaseSupersetView, SupersetModelView, DeleteMixin, PermissionManagement,
-    catch_exception, json_response
+    catch_exception, json_response, json_error_response, get_error_msg, CsvResponse,
+    generate_download_headers, get_user_roles
 )
-from .base import json_error_response
 from .hdfs import HDFSBrowser
 from .dashboard import DashboardModelView
+from .utils import bootstrap_user_data
 from .slice import SliceModelView
 
 
 config = app.config
 QueryStatus = utils.QueryStatus
+stats_logger = config.get('STATS_LOGGER')
+DAR = DatasourceAccessRequest
+
+
+ALL_DATASOURCE_ACCESS_ERR = __(
+    'This endpoint requires the `all_datasource_access` permission')
+DATASOURCE_MISSING_ERR = __('The datasource seems to have been deleted')
+ACCESS_REQUEST_MISSING_ERR = __(
+    'The access requests seem to have been deleted')
+USER_MISSING_ERR = __('The user seems to have been deleted')
+DATASOURCE_ACCESS_ERR = __("You don't have access to this datasource")
+
+FORM_DATA_KEY_BLACKLIST = []
+if not config.get('ENABLE_JAVASCRIPT_CONTROLS'):
+    FORM_DATA_KEY_BLACKLIST = [
+        'js_tooltip',
+        'js_onclick_href',
+        'js_data_mutator',
+    ]
+
+
+def get_database_access_error_msg(database_name):
+    return __('This view requires the database %(name)s or '
+              '`all_datasource_access` permission', name=database_name)
+
+
+def get_datasource_access_error_msg(datasource_name):
+    return __('This endpoint requires the datasource %(name)s, database or '
+              '`all_datasource_access` permission', name=datasource_name)
+
+
+def json_success(json_msg, status=200):
+    return Response(json_msg, status=status, mimetype='application/json')
+
+
+def is_owner(obj, user):
+    """ Check if user is owner of the slice """
+    return obj and user in obj.owners
+
+
+def check_ownership(obj, raise_if_false=True):
+    """Meant to be used in `pre_update` hooks on models to enforce ownership
+
+    Admin have all access, and other users need to be referenced on either
+    the created_by field that comes with the ``AuditMixin``, or in a field
+    named ``owners`` which is expected to be a one-to-many with the User
+    model. It is meant to be used in the ModelView's pre_update hook in
+    which raising will abort the update.
+    """
+    if not obj:
+        return False
+
+    security_exception = PermissionException(
+        "You don't have the rights to alter [{}]".format(obj))
+
+    if g.user.is_anonymous():
+        if raise_if_false:
+            raise security_exception
+        return False
+    roles = (r.name for r in get_user_roles())
+    if 'Admin' in roles:
+        return True
+    session = db.create_scoped_session()
+    orig_obj = session.query(obj.__class__).filter_by(id=obj.id).first()
+    owner_names = (user.username for user in orig_obj.owners)
+    if (
+                    hasattr(orig_obj, 'created_by') and
+                    orig_obj.created_by and
+                    orig_obj.created_by.username == g.user.username):
+        return True
+    if (
+                        hasattr(orig_obj, 'owners') and
+                        g.user and
+                    hasattr(g.user, 'username') and
+                    g.user.username in owner_names):
+        return True
+    if raise_if_false:
+        raise security_exception
+    else:
+        return False
 
 
 class KV(BaseSupersetView):
@@ -109,15 +208,254 @@ class CssTemplateAsyncModelView(CssTemplateModelView):
 
 
 class Superset(BaseSupersetView, PermissionManagement):
-    route_base = '/p'
 
-    def get_viz(self, slice_id=None, args=None, datasource_type=None, datasource_id=None,
-                database_id=None, full_tb_name=None):
+    def json_response(self, obj, status=200):
+        return Response(
+            json.dumps(obj, default=utils.json_int_dttm_ser),
+            status=status,
+            mimetype='application/json')
+
+    @expose('/datasources/')
+    def datasources(self):
+        datasources = SourceRegistry.get_all_datasources(db.session)
+        datasources = [o.short_data for o in datasources]
+        datasources = sorted(datasources, key=lambda o: o['name'])
+        return self.json_response(datasources)
+
+    @expose('/override_role_permissions/', methods=['POST'])
+    def override_role_permissions(self):
+        """Updates the role with the give datasource permissions.
+
+          Permissions not in the request will be revoked. This endpoint should
+          be available to admins only. Expects JSON in the format:
+           {
+            'role_name': '{role_name}',
+            'database': [{
+                'datasource_type': '{table|druid}',
+                'name': '{database_name}',
+                'schema': [{
+                    'name': '{schema_name}',
+                    'datasources': ['{datasource name}, {datasource name}']
+                }]
+            }]
+        }
+        """
+        data = request.get_json(force=True)
+        role_name = data['role_name']
+        databases = data['database']
+
+        db_ds_names = set()
+        for dbs in databases:
+            for schema in dbs['schema']:
+                for ds_name in schema['datasources']:
+                    fullname = utils.get_datasource_full_name(
+                        dbs['name'], ds_name, schema=schema['name'])
+                    db_ds_names.add(fullname)
+
+        existing_datasources = SourceRegistry.get_all_datasources(db.session)
+        datasources = [
+            d for d in existing_datasources if d.full_name in db_ds_names]
+        role = security_manager.find_role(role_name)
+        # remove all permissions
+        role.permissions = []
+        # grant permissions to the list of datasources
+        granted_perms = []
+        for datasource in datasources:
+            view_menu_perm = security_manager.find_permission_view_menu(
+                view_menu_name=datasource.perm,
+                permission_name='datasource_access')
+            # prevent creating empty permissions
+            if view_menu_perm and view_menu_perm.view_menu:
+                role.permissions.append(view_menu_perm)
+                granted_perms.append(view_menu_perm.view_menu.name)
+        db.session.commit()
+        return self.json_response({
+            'granted': granted_perms,
+            'requested': list(db_ds_names),
+        }, status=201)
+
+    @expose('/request_access/')
+    def request_access(self):
+        datasources = set()
+        dashboard_id = request.args.get('dashboard_id')
+        if dashboard_id:
+            dash = (
+                db.session.query(Dashboard)
+                    .filter_by(id=int(dashboard_id))
+                    .one()
+            )
+            datasources |= dash.datasources
+        datasource_id = request.args.get('datasource_id')
+        datasource_type = request.args.get('datasource_type')
+        if datasource_id:
+            ds_class = SourceRegistry.sources.get(datasource_type)
+            datasource = (
+                db.session.query(ds_class)
+                    .filter_by(id=int(datasource_id))
+                    .one()
+            )
+            datasources.add(datasource)
+
+        has_access = all(
+            (
+                datasource and security_manager.datasource_access(datasource)
+                for datasource in datasources
+            ))
+        if has_access:
+            return redirect('/superset/dashboard/{}'.format(dashboard_id))
+
+        if request.args.get('action') == 'go':
+            for datasource in datasources:
+                access_request = DAR(
+                    datasource_id=datasource.id,
+                    datasource_type=datasource.type)
+                db.session.add(access_request)
+                db.session.commit()
+            flash(__('Access was requested'), 'info')
+            return redirect('/')
+
+        return self.render_template(
+            'superset/request_access.html',
+            datasources=datasources,
+            datasource_names=', '.join([o.name for o in datasources]),
+        )
+
+    @expose('/approve')
+    def approve(self):
+        def clean_fulfilled_requests(session):
+            for r in session.query(DAR).all():
+                datasource = SourceRegistry.get_datasource(
+                    r.datasource_type, r.datasource_id, session)
+                user = security_manager.get_user_by_id(r.created_by_fk)
+                if not datasource or \
+                        security_manager.datasource_access(datasource, user):
+                    # datasource does not exist anymore
+                    session.delete(r)
+            session.commit()
+        datasource_type = request.args.get('datasource_type')
+        datasource_id = request.args.get('datasource_id')
+        created_by_username = request.args.get('created_by')
+        role_to_grant = request.args.get('role_to_grant')
+        role_to_extend = request.args.get('role_to_extend')
+
+        session = db.session
+        datasource = SourceRegistry.get_datasource(
+            datasource_type, datasource_id, session)
+
+        if not datasource:
+            flash(DATASOURCE_MISSING_ERR, 'alert')
+            return json_error_response(DATASOURCE_MISSING_ERR)
+
+        requested_by = security_manager.find_user(username=created_by_username)
+        if not requested_by:
+            flash(USER_MISSING_ERR, 'alert')
+            return json_error_response(USER_MISSING_ERR)
+
+        requests = (
+            session.query(DAR)
+                .filter(
+                DAR.datasource_id == datasource_id,
+                DAR.datasource_type == datasource_type,
+                DAR.created_by_fk == requested_by.id)
+                .all()
+        )
+
+        if not requests:
+            flash(ACCESS_REQUEST_MISSING_ERR, 'alert')
+            return json_error_response(ACCESS_REQUEST_MISSING_ERR)
+
+        # check if you can approve
+        if security_manager.all_datasource_access() or g.user.id == datasource.owner_id:
+            # can by done by admin only
+            if role_to_grant:
+                role = security_manager.find_role(role_to_grant)
+                requested_by.roles.append(role)
+                msg = __(
+                    '%(user)s was granted the role %(role)s that gives access '
+                    'to the %(datasource)s',
+                    user=requested_by.username,
+                    role=role_to_grant,
+                    datasource=datasource.full_name)
+                utils.notify_user_about_perm_udate(
+                    g.user, requested_by, role, datasource,
+                    'email/role_granted.txt', app.config)
+                flash(msg, 'info')
+
+            if role_to_extend:
+                perm_view = security_manager.find_permission_view_menu(
+                    'email/datasource_access', datasource.perm)
+                role = security_manager.find_role(role_to_extend)
+                security_manager.add_permission_role(role, perm_view)
+                msg = __('Role %(r)s was extended to provide the access to '
+                         'the datasource %(ds)s', r=role_to_extend,
+                         ds=datasource.full_name)
+                utils.notify_user_about_perm_udate(
+                    g.user, requested_by, role, datasource,
+                    'email/role_extended.txt', app.config)
+                flash(msg, 'info')
+            clean_fulfilled_requests(session)
+        else:
+            flash(__('You have no permission to approve this request'),
+                  'danger')
+            return redirect('/accessrequestsmodelview/list/')
+        for r in requests:
+            session.delete(r)
+        session.commit()
+        return redirect('/accessrequestsmodelview/list/')
+
+    def get_form_data(self, slice_id=None):
+        form_data = {}
+        post_data = request.form.get('form_data')
+        request_args_data = request.args.get('form_data')
+        # Supporting POST
+        if post_data:
+            form_data.update(json.loads(post_data))
+        # request params can overwrite post body
+        if request_args_data:
+            form_data.update(json.loads(request_args_data))
+
+        url_id = request.args.get('r')
+        if url_id:
+            saved_url = db.session.query(Url).filter_by(id=url_id).first()
+            if saved_url:
+                url_str = parse.unquote_plus(
+                    saved_url.url.split('?')[1][10:], encoding='utf-8', errors=None)
+                url_form_data = json.loads(url_str)
+                # allow form_date in request override saved url
+                url_form_data.update(form_data)
+                form_data = url_form_data
+
+        if request.args.get('viz_type'):
+            # Converting old URLs
+            form_data = cast_form_data(form_data)
+
+        form_data = {
+            k: v
+            for k, v in form_data.items()
+            if k not in FORM_DATA_KEY_BLACKLIST
+        }
+
+        # When a slice_id is present, load from DB and override
+        # the form_data from the DB with the other form_data provided
+        slice_id = form_data.get('slice_id') or slice_id
+        slc = None
+
+        if slice_id:
+            slc = db.session.query(Slice).filter_by(id=slice_id).first()
+            slice_form_data = slc.form_data.copy()
+            # allow form_data in request override slice from_data
+            slice_form_data.update(form_data)
+            form_data = slice_form_data
+
+        return form_data, slc
+
+    def get_viz(self, slice_id=None, form_data=None, datasource_type=None,
+                datasource_id=None, force=False, database_id=None, full_tb_name=None):
         if slice_id:
             slc = db.session.query(Slice).filter_by(id=slice_id).one()
             return slc.get_viz()
         else:
-            viz_type = args.get('viz_type', 'table')
+            viz_type = form_data.get('viz_type', 'table')
             if database_id and full_tb_name:
                 datasource = Dataset.temp_dataset(database_id, full_tb_name)
             else:
@@ -129,7 +467,8 @@ class Superset(BaseSupersetView, PermissionManagement):
                 raise PropertyException(
                     'Missing connection for dataset: [{}]'.format(datasource))
             viz_obj = viz.viz_types[viz_type](
-                datasource, request.args if request.args else args)
+                datasource, form_data=form_data, force=force,
+            )
             return viz_obj
 
     @catch_exception
@@ -141,7 +480,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         cls = str_to_model.get(model)
         obj = db.session.query(cls).filter_by(id=id).first()
         if not obj:
-            msg = _("Not found the object: model={model}, id={id}")\
+            msg = _("Not found the object: model={model}, id={id}") \
                 .format(model=cls.__name__, id=id)
             logging.error(msg)
             return json_response(status=400, message=msg)
@@ -190,137 +529,305 @@ class Superset(BaseSupersetView, PermissionManagement):
     @catch_exception
     @expose("/slice/<slice_id>/")
     def slice(self, slice_id):
-        viz_obj = self.get_viz(slice_id)
-        return redirect(viz_obj.get_url(**request.args))
+        form_data, slc = self.get_form_data(slice_id)
+        endpoint = '/superset/explore/?form_data={}'.format(
+            parse.quote(json.dumps(form_data)),
+        )
+        if request.args.get('standalone') == 'true':
+            endpoint += '&standalone=true'
+        return redirect(endpoint)
 
-    @catch_exception
-    @expose("/explore_json/<datasource_type>/<datasource_id>/")
-    def explore_json(self, datasource_type, datasource_id):
-        """render the chart of slice"""
-        database_id = request.args.get('database_id')
-        full_tb_name = request.args.get('full_tb_name')
-        slice_id = request.args.get('slice_id')
+    def get_query_string_response(self, viz_obj):
+        query = None
+        try:
+            query_obj = viz_obj.query_obj()
+            if query_obj:
+                query = viz_obj.datasource.get_query_str(query_obj)
+        except Exception as e:
+            logging.exception(e)
+            return json_error_response(e)
+
+        if query_obj and query_obj['prequeries']:
+            query_obj['prequeries'].append(query)
+            query = ';\n\n'.join(query_obj['prequeries'])
+        if query:
+            query += ';'
+        else:
+            query = 'No query.'
+
+        return Response(
+            json.dumps({
+                'query': query,
+                'language': viz_obj.datasource.query_language,
+            }),
+            status=200,
+            mimetype='application/json')
+
+    def generate_json(self, datasource_type, datasource_id, form_data,
+                      csv=False, query=False, force=False):
+        # TODO check guardian permission
         try:
             viz_obj = self.get_viz(
                 datasource_type=datasource_type,
                 datasource_id=datasource_id,
-                database_id=database_id,
-                full_tb_name=full_tb_name,
-                args=request.args)
-            self.check_slice_explore_perm(
-                slice_id, datasource_id, database_id, full_tb_name)
+                form_data=form_data,
+                force=force,
+            )
         except Exception as e:
             logging.exception(e)
-            return Response(utils.error_msg_from_exception(e), status=500)
+            return json_error_response(
+                utils.error_msg_from_exception(e),
+                stacktrace=traceback.format_exc())
+
+        if not security_manager.datasource_access(viz_obj.datasource, g.user):
+            return json_error_response(
+                DATASOURCE_ACCESS_ERR, status=404, link=config.get(
+                    'PERMISSION_INSTRUCTIONS_LINK'))
+
+        if csv:
+            return CsvResponse(
+                viz_obj.get_csv(),
+                status=200,
+                headers=generate_download_headers('csv'),
+                mimetype='application/csv')
+
+        if query:
+            return self.get_query_string_response(viz_obj)
+
+        try:
+            payload = viz_obj.get_payload()
+        except SupersetException as se:
+            logging.exception(se)
+            return json_error_response(utils.error_msg_from_exception(se),
+                                       status=se.status)
+        except Exception as e:
+            logging.exception(e)
+            return json_error_response(utils.error_msg_from_exception(e))
 
         status = 200
+        if (
+                        payload.get('status') == QueryStatus.FAILED or
+                        payload.get('error') is not None
+        ):
+            status = 400
+
+        return json_success(viz_obj.json_dumps(payload), status=status)
+
+    @expose('/slice_json/<slice_id>')
+    def slice_json(self, slice_id):
+        try:
+            form_data, slc = self.get_form_data(slice_id)
+            datasource_type = slc.datasource.type
+            datasource_id = slc.datasource.id
+
+        except Exception as e:
+            return json_error_response(
+                utils.error_msg_from_exception(e),
+                stacktrace=traceback.format_exc())
+        return self.generate_json(datasource_type=datasource_type,
+                                  datasource_id=datasource_id,
+                                  form_data=form_data)
+
+    @expose('/annotation_json/<layer_id>')
+    def annotation_json(self, layer_id):
+        form_data = self.get_form_data()[0]
+        form_data['layer_id'] = layer_id
+        form_data['filters'] = [{'col': 'layer_id', 'op': '==', 'val': layer_id}]
+        datasource = AnnotationDatasource()
+        viz_obj = viz.viz_types['table'](
+            datasource,
+            form_data=form_data,
+            force=False,
+        )
         try:
             payload = viz_obj.get_payload()
         except Exception as e:
             logging.exception(e)
-            return Response(utils.error_msg_from_exception(e), status=500)
-
+            return json_error_response(utils.error_msg_from_exception(e))
+        status = 200
         if payload.get('status') == QueryStatus.FAILED:
-            status = 500
-        return Response(
-            viz_obj.json_dumps(payload),
-            status=status,
-            mimetype="application/json")
+            status = 400
+        return json_success(viz_obj.json_dumps(payload), status=status)
+
+    @catch_exception
+    @expose("/explore_json/<datasource_type>/<datasource_id>/")
+    @expose('/explore_json/', methods=['GET', 'POST'])
+    def explore_json(self, datasource_type, datasource_id):
+        """render the chart of slice"""
+        try:
+            csv = request.args.get('csv') == 'true'
+            query = request.args.get('query') == 'true'
+            force = request.args.get('force') == 'true'
+            form_data = self.get_form_data()[0]
+            datasource_id, datasource_type = self.datasource_info(
+                datasource_id, datasource_type, form_data)
+        except Exception as e:
+            logging.exception(e)
+            return json_error_response(
+                utils.error_msg_from_exception(e),
+                stacktrace=traceback.format_exc())
+        return self.generate_json(datasource_type=datasource_type,
+                                  datasource_id=datasource_id,
+                                  form_data=form_data,
+                                  csv=csv,
+                                  query=query,
+                                  force=force)
+
+    @expose('/import_dashboards', methods=['GET', 'POST'])
+    def import_dashboards(self):
+        """Overrides the dashboards using json instances from the file."""
+        f = request.files.get('file')
+        if request.method == 'POST' and f:
+            current_tt = int(time.time())
+            data = json.loads(f.stream.read(), object_hook=utils.decode_dashboards)
+            # TODO: import DRUID datasources
+            for table in data['datasources']:
+                type(table).import_obj(table, import_time=current_tt)
+            db.session.commit()
+            for dashboard in data['dashboards']:
+                Dashboard.import_obj(
+                    dashboard, import_time=current_tt)
+            db.session.commit()
+            return redirect('/dashboardmodelview/list/')
+        return self.render_template('superset/import_dashboards.html')
+
+    @expose('/explorev2/<datasource_type>/<datasource_id>/')
+    def explorev2(self, datasource_type, datasource_id):
+        """Deprecated endpoint, here for backward compatibility of urls"""
+        return redirect(url_for(
+            'Superset.explore',
+            datasource_type=datasource_type,
+            datasource_id=datasource_id,
+            **request.args))
+
+    @staticmethod
+    def datasource_info(datasource_id, datasource_type, form_data):
+        """Compatibility layer for handling of datasource info
+
+        datasource_id & datasource_type used to be passed in the URL
+        directory, now they should come as part of the form_data,
+        This function allows supporting both without duplicating code"""
+        datasource = form_data.get('datasource', '')
+        if '__' in datasource:
+            datasource_id, datasource_type = datasource.split('__')
+            # The case where the datasource has been deleted
+            datasource_id = None if datasource_id == 'None' else datasource_id
+
+        if not datasource_id:
+            raise Exception(
+                'The datasource associated with this chart no longer exists')
+        datasource_id = int(datasource_id)
+        return datasource_id, datasource_type
 
     @catch_exception
     @expose("/explore/<datasource_type>/<datasource_id>/")
+    @expose('/explore/', methods=['GET', 'POST'])
     def explore(self, datasource_type, datasource_id):
         """render the parameters of slice"""
-        viz_type = request.args.get("viz_type")
-        slice_id = request.args.get('slice_id')
-        database_id = request.args.get('database_id')
-        full_tb_name = request.args.get('full_tb_name')
-        user_id = g.user.id
+        user_id = g.user.get_id() if g.user else None
+        form_data, slc = self.get_form_data()
 
-        slc = None
-        if slice_id:
-            slc = db.session.query(Slice).filter_by(id=slice_id).first()
+        datasource_id, datasource_type = self.datasource_info(
+            datasource_id, datasource_type, form_data)
 
-        datasets = db.session.query(Dataset).all()
-        datasets = sorted(datasets, key=lambda ds: ds.full_name)
-        if self.guardian_auth:
-            from superset.guardian import guardian_client as client
-            if not client.check_global_read(g.user.username):
-                readable_names = client.search_model_perms(
-                    g.user.username, Dataset.guardian_type)
-                readable_datasets = [d for d in datasets if d.name in readable_names]
-                datasets = readable_datasets
+        error_redirect = '/slicemodelview/list/'
+        datasource = SourceRegistry.get_datasource(
+            datasource_type, datasource_id, db.session)
 
-        try:
-            viz_obj = self.get_viz(
-                datasource_type=datasource_type,
-                datasource_id=datasource_id,
-                database_id=database_id,
-                full_tb_name=full_tb_name,
-                args=request.args)
-        except Exception as e:
-            raise e
+        # TODO
+        # if self.guardian_auth:
+        #     from superset.guardian import guardian_client as client
+        #     if not client.check_global_read(g.user.username):
+        #         readable_names = client.search_model_perms(
+        #             g.user.username, Dataset.guardian_type)
+        #         readable_datasets = [d for d in datasets if d.name in readable_names]
+        #         datasets = readable_datasets
+
+        if not datasource:
+            flash(DATASOURCE_MISSING_ERR, 'danger')
+            return redirect(error_redirect)
+
+        if not security_manager.datasource_access(datasource):
+            flash(
+                __(get_datasource_access_error_msg(datasource.name)),
+                'danger')
+            return redirect(
+                'superset/request_access/?'
+                'datasource_type={datasource_type}&'
+                'datasource_id={datasource_id}&'
+                ''.format(**locals()))
+
+        viz_type = form_data.get('viz_type')
+        if not viz_type and datasource.default_endpoint:
+            return redirect(datasource.default_endpoint)
 
         # slc perms
-        slice_add_perm = True
-        slice_download_perm = True
-        if not slc:
-            slice_edit_perm = True
-        else:
-            slice_edit_perm = self.check_edit_perm(slc.guardian_datasource(),
-                                                   raise_if_false=False)
+        slice_add_perm = security_manager.can_access('can_add', 'SliceModelView')
+        slice_overwrite_perm = is_owner(slc, g.user)
+        slice_download_perm = security_manager.can_access(
+            'can_download', 'SliceModelView')
+
+        form_data['datasource'] = str(datasource_id) + '__' + datasource_type
+
+        # On explore, merge extra filters into the form data
+        utils.split_adhoc_filters_into_base_filters(form_data)
+        merge_extra_filters(form_data)
+
+        # merge request url params
+        if request.method == 'GET':
+            merge_request_params(form_data, request.args)
+
         # handle save or overwrite
         action = request.args.get('action')
+
+        if action == 'overwrite' and not slice_overwrite_perm:
+            return json_error_response(
+                _('You don\'t have the rights to ') + _('alter this ') + _('chart'),
+                status=400)
+
+        if action == 'saveas' and not slice_add_perm:
+            return json_error_response(
+                _('You don\'t have the rights to ') + _('create a ') + _('chart'),
+                status=400)
+
         if action in ('saveas', 'overwrite'):
             return self.save_or_overwrite_slice(
-                request.args, slc, slice_add_perm, slice_edit_perm)
+                request.args,
+                slc, slice_add_perm,
+                slice_overwrite_perm,
+                slice_download_perm,
+                datasource_id,
+                datasource_type,
+                datasource.name)
 
-        is_in_explore_v2_beta = False
-        # handle different endpoints
-        if request.args.get("csv") == "true":
-            payload = viz_obj.get_csv()
-            return Response(
-                payload,
-                status=200,
-                headers=self.generate_download_headers("csv"),
-                mimetype="application/csv")
-        elif request.args.get("standalone") == "true":
-            return self.render_template("superset/standalone.html", viz=viz_obj, standalone_mode=True)
-        elif request.args.get("V2") == "true" or is_in_explore_v2_beta:
-            # bootstrap data for explore V2
-            bootstrap_data = {
-                "can_add": slice_add_perm,
-                "can_download": slice_download_perm,
-                "can_edit": slice_edit_perm,
-                # TODO: separate endpoint for fetching datasources
-                "datasources": [(d.id, d.full_name) for d in datasets],
-                "datasource_id": datasource_id,
-                "datasource_name": viz_obj.datasource.name,
-                "datasource_type": datasource_type,
-                "user_id": user_id,
-                "viz": json.loads(viz_obj.json_data),
-                "filter_select": viz_obj.datasource.filter_select_enabled
-            }
-            table_name = viz_obj.datasource.table_name \
-                if datasource_type == 'table' \
-                else viz_obj.datasource.datasource_name
-            return self.render_template(
-                "superset/explorev2.html",
-                bootstrap_data=json.dumps(bootstrap_data),
-                slice=slc,
-                table_name=table_name)
+        standalone = request.args.get('standalone') == 'true'
+        bootstrap_data = {
+            'can_add': slice_add_perm,
+            'can_download': slice_download_perm,
+            'can_overwrite': slice_overwrite_perm,
+            'datasource': datasource.data,
+            'form_data': form_data,
+            'datasource_id': datasource_id,
+            'datasource_type': datasource_type,
+            'slice': slc.data if slc else None,
+            'standalone': standalone,
+            'user_id': user_id,
+            'forced_height': request.args.get('height'),
+            'common': self.common_bootsrap_payload(),
+        }
+        table_name = datasource.table_name \
+            if datasource_type == 'table' \
+            else datasource.datasource_name
+        if slc:
+            title = slc.slice_name
         else:
-            self.update_redirect()
-            return self.render_template(
-                "superset/explore.html",
-                viz=viz_obj,
-                slice=slc,
-                datasources=datasets,
-                can_add=slice_add_perm,
-                can_edit=slice_edit_perm,
-                can_download=slice_download_perm,
-                userid=user_id
-            )
+            title = 'Explore - ' + table_name
+        return self.render_template(
+            'superset/basic.html',
+            bootstrap_data=json.dumps(bootstrap_data),
+            entry='explore',
+            title=title,
+            standalone_mode=standalone)
 
     @catch_exception
     @expose("/filter/<datasource_type>/<datasource_id>/<column>/")
@@ -334,32 +841,20 @@ class Superset(BaseSupersetView, PermissionManagement):
         :return:
         """
         # TODO: Cache endpoint by user, datasource and column
-        error_redirect = '/slice/list/'
-        datasource_class = Dataset
-
-        datasource = db.session.query(
-            datasource_class).filter_by(id=datasource_id).first()
-
+        datasource = SourceRegistry.get_datasource(
+            datasource_type, datasource_id, db.session)
         if not datasource:
-            flash(DATASOURCE_MISSING_ERR, "alert")
-            raise ParameterException(DATASOURCE_MISSING_ERR)
+            return json_error_response(DATASOURCE_MISSING_ERR)
+        if not security_manager.datasource_access(datasource):
+            return json_error_response(DATASOURCE_ACCESS_ERR)
 
-        viz_type = request.args.get("viz_type")
-        if not viz_type and datasource.default_endpoint:
-            return redirect(datasource.default_endpoint)
-        if not viz_type:
-            viz_type = "table"
-        try:
-            obj = viz.viz_types[viz_type](
-                datasource,
-                form_data=request.args,
-                slice_=None)
-        except Exception as e:
-            flash(str(e), "danger")
-            return redirect(error_redirect)
-        status = 200
-        payload = obj.get_values_for_column(column)
-        return json_response(data=payload)
+        payload = json.dumps(
+            datasource.values_for_column(
+                column,
+                config.get('FILTER_SELECT_ROW_LIMIT', 10000),
+            ),
+            default=utils.json_int_dttm_ser)
+        return json_success(payload)
 
     def check_slice_explore_perm(self, slice_id, dataset_id, database_id, full_tb_name):
         if self.guardian_auth is True:
@@ -378,54 +873,33 @@ class Superset(BaseSupersetView, PermissionManagement):
                     self.check_read_perm(
                         dataset.hdfs_table.hdfs_connection.guardian_datasource())
 
-    def save_or_overwrite_slice(self, args, slc, slice_add_perm, slice_edit_perm):
+    def save_or_overwrite_slice(
+            self, args, slc, slice_add_perm, slice_overwrite_perm, slice_download_perm,
+            datasource_id, datasource_type, datasource_name):
         """Save or overwrite a slice"""
         slice_name = args.get('slice_name')
         action = args.get('action')
-
-        # TODO use form processing form wtforms
-        d = args.to_dict(flat=False)
-        del d['action']
-        if 'previous_viz_type' in d:
-            del d['previous_viz_type']
-
-        as_list = ('metrics', 'groupby', 'columns', 'all_columns',
-                   'mapbox_label', 'order_by_cols')
-        for k in d:
-            v = d.get(k)
-            if k in as_list and not isinstance(v, list):
-                d[k] = [v] if v else []
-            if k not in as_list and isinstance(v, list):
-                d[k] = v[0]
-
-        datasource_type = args.get('datasource_type')
-        datasource_id = args.get('datasource_id')
-        database_id = args.get('database_id')
-        full_tb_name = args.get('full_tb_name')
-        if database_id and full_tb_name:
-            datasource_id = None
+        form_data, _ = self.get_form_data()
 
         if action in ('saveas'):
-            d.pop('slice_id')  # don't save old slice_id
-            slc = Slice()
+            if 'slice_id' in form_data:
+                form_data.pop('slice_id')  # don't save old slice_id
+            slc = Slice(owners=[g.user] if g.user else [])
 
-        slc.params = json.dumps(d, indent=4, sort_keys=True)
-        slc.datasource_name = args.get('datasource_name')
-        slc.viz_type = args.get('viz_type')
+        slc.params = json.dumps(form_data)
+        slc.datasource_name = datasource_name
+        slc.viz_type = form_data['viz_type']
         slc.datasource_type = datasource_type
-        slc.datasource_id = datasource_id if datasource_id else None
-        slc.slice_name = slice_name or slc.slice_name
-        slc.database_id = database_id if database_id else None
-        slc.full_table_name = full_tb_name
-        SliceModelView().check_column_values(slc)
+        slc.datasource_id = datasource_id
+        slc.slice_name = slice_name
+        # slc.database_id = database_id if database_id else None
+        # slc.full_table_name = full_tb_name
+        # SliceModelView().check_column_values(slc)
 
         if action in ('saveas') and slice_add_perm:
             self.save_slice(slc)
-        elif action == 'overwrite' and slice_edit_perm:
+        elif action == 'overwrite' and slice_overwrite_perm:
             self.overwrite_slice(slc)
-            slc = db.session.query(Slice).filter_by(id=slc.id).first()
-            for dash in slc.dashboards:
-                dash.need_capture = True
 
         # Adding slice to a dashboard if requested
         dash = None
@@ -435,35 +909,58 @@ class Superset(BaseSupersetView, PermissionManagement):
                     .filter_by(id=int(request.args.get('save_to_dashboard_id')))
                     .one()
             )
-            if dash and slc not in dash.slices:
-                dash.slices.append(slc)
-                dash.need_capture = True
-                db.session.commit()
-                Log.log_update(dash, 'dashboard', g.user.id)
+
+            # check edit dashboard permissions
+            # TODO guardian permission
+            dash_overwrite_perm = check_ownership(dash, raise_if_false=False)
+            if not dash_overwrite_perm:
+                return json_error_response(
+                    _('You don\'t have the rights to ') + _('alter this ') +
+                    _('dashboard'),
+                    status=400)
+
             flash(
-                _("Slice [{slice}] was added to dashboard [{dashboard}]").format(
-                    slice=slc.slice_name,
-                    dashboard=dash.name),
-                "info")
+                'Slice [{}] was added to dashboard [{}]'.format(
+                    slc.slice_name,
+                    dash.dashboard_title),
+                'info')
         elif request.args.get('add_to_dash') == 'new':
-            dash = Dashboard(name=request.args.get('new_dashboard_name'))
-            if dash and slc not in dash.slices:
-                dash.slices.append(slc)
-                dash_view = DashboardModelView()
-                dash_view._add(dash)
-            flash(_("Dashboard [{dashboard}] just got created and slice [{slice}] "
-                    "was added to it").format(dashboard=dash.name,
-                                              slice=slc.slice_name),
-                  "info")
+            # check create dashboard permissions
+            dash_add_perm = security_manager.can_access('can_add', 'DashboardModelView')
+            if not dash_add_perm:
+                return json_error_response(
+                    _('You don\'t have the rights to ') + _('create a ') + _('dashboard'),
+                    status=400)
+
+            dash = Dashboard(
+                dashboard_title=request.args.get('new_dashboard_name'),
+                owners=[g.user] if g.user else [])
+            flash(
+                'Dashboard [{}] just got created and slice [{}] was added '
+                'to it'.format(
+                    dash.dashboard_title,
+                    slc.slice_name),
+                'info')
+
+        if dash and slc not in dash.slices:
+            dash.slices.append(slc)
+            db.session.commit()
+            # Log.log_update(dash, 'dashboard', g.user.id)
+            # dash_view = DashboardModelView()
+            # dash_view._add(dash)
+
+        response = {
+            'can_add': slice_add_perm,
+            'can_download': slice_download_perm,
+            'can_overwrite': is_owner(slc, g.user),
+            'form_data': slc.form_data,
+            'slice': slc.data,
+        }
 
         if request.args.get('goto_dash') == 'true':
-            if request.args.get('V2') == 'true':
-                return dash.url
-            return redirect(dash.url)
-        else:
-            if request.args.get('V2') == 'true':
-                return slc.slice_url
-            return redirect(slc.slice_url)
+            response.update({'dashboard': dash.url})
+
+        return json_success(json.dumps(response))
 
     def save_slice(self, slc):
         Slice.check_name(slc.slice_name)
@@ -484,18 +981,25 @@ class Superset(BaseSupersetView, PermissionManagement):
         Log.log_update(slc, 'slice', g.user.id)
 
     @catch_exception
-    @expose("/checkbox/<model_view>/<id_>/<attr>/<value>/", methods=['GET'])
+    @expose('/checkbox/<model_view>/<id_>/<attr>/<value>', methods=['GET'])
     def checkbox(self, model_view, id_, attr, value):
         """endpoint for checking/unchecking any boolean in a sqla model"""
-        views = sys.modules[__name__]
-        model_view_cls = getattr(views, model_view)
-        model = model_view_cls.datamodel.obj
-
-        obj = db.session.query(model).filter_by(id=id_).first()
-        if obj:
-            setattr(obj, attr, value == 'true')
+        modelview_to_model = {
+            'TableColumnInlineView':
+                SourceRegistry.sources['table'].column_class,
+            'DruidColumnInlineView':
+                SourceRegistry.sources['druid'].column_class,
+        }
+        model = modelview_to_model[model_view]
+        col = db.session.query(model).filter_by(id=id_).first()
+        checked = value == 'true'
+        if col:
+            setattr(col, attr, checked)
+            if checked:
+                metrics = col.get_metrics().values()
+                col.datasource.add_missing_metrics(metrics)
             db.session.commit()
-        return json_response(data="OK")
+        return json_success('OK')
 
     @catch_exception
     @expose("/all_tables/<db_id>/")
@@ -513,16 +1017,50 @@ class Superset(BaseSupersetView, PermissionManagement):
             all_views.extend(database.all_view_names())
         return json_response(data={"tables": all_tables, "views": all_views})
 
-    @catch_exception
-    @expose("/tables/<db_id>/<schema>/")
-    def tables(self, db_id, schema):
-        """endpoint to power the calendar heatmap on the welcome page"""
-        schema = None if schema in ('null', 'undefined') else schema
+    @expose('/schemas/<db_id>/')
+    def schemas(self, db_id):
+        db_id = int(db_id)
         database = db.session.query(Database).filter_by(id=db_id).one()
-        tables = [t for t in database.all_table_names(schema)]
-        views = [v for v in database.all_table_names(schema)]
-        payload = {'tables': tables, 'views': views}
-        return json_response(data=payload)
+        schemas = database.all_schema_names()
+        schemas = security_manager.schemas_accessible_by_user(database, schemas)
+        return Response(
+            json.dumps({'schemas': schemas}),
+            mimetype='application/json')
+
+    @catch_exception
+    @expose('/tables/<db_id>/<schema>/<substr>/')
+    def tables(self, db_id, schema, substr):
+        """Endpoint to fetch the list of tables for given database"""
+        db_id = int(db_id)
+        schema = utils.js_string_to_python(schema)
+        substr = utils.js_string_to_python(substr)
+        database = db.session.query(Database).filter_by(id=db_id).one()
+        table_names = security_manager.accessible_by_user(
+            database, database.all_table_names(schema), schema)
+        view_names = security_manager.accessible_by_user(
+            database, database.all_view_names(schema), schema)
+
+        if substr:
+            table_names = [tn for tn in table_names if substr in tn]
+            view_names = [vn for vn in view_names if substr in vn]
+
+        max_items = config.get('MAX_TABLE_NAMES') or len(table_names)
+        total_items = len(table_names) + len(view_names)
+        max_tables = len(table_names)
+        max_views = len(view_names)
+        if total_items and substr:
+            max_tables = max_items * len(table_names) // total_items
+            max_views = max_items * len(view_names) // total_items
+
+        table_options = [{'value': tn, 'label': tn}
+                         for tn in table_names[:max_tables]]
+        table_options.extend([{'value': vn, 'label': '[view] {}'.format(vn)}
+                              for vn in view_names[:max_views]])
+        payload = {
+            'tableLength': len(table_names) + len(view_names),
+            'options': table_options,
+        }
+        return json_success(json.dumps(payload))
 
     @catch_exception
     @expose("/copy_dash/<dashboard_id>/", methods=['GET', 'POST'])
@@ -531,9 +1069,28 @@ class Superset(BaseSupersetView, PermissionManagement):
         session = db.session()
         data = json.loads(request.form.get('data'))
         dash = Dashboard()
-        original_dash = session.query(Dashboard).filter_by(id=dashboard_id).first()
-        dash.name = data['name']
-        dash.slices = original_dash.slices
+        original_dash = (
+            session
+                .query(Dashboard)
+                .filter_by(id=dashboard_id).first())
+
+        dash.owners = [g.user] if g.user else []
+        dash.name = data['dashboard_title']
+        if data['duplicate_slices']:
+            # Duplicating slices as well, mapping old ids to new ones
+            old_to_new_sliceids = {}
+            for slc in original_dash.slices:
+                new_slice = slc.clone()
+                new_slice.owners = [g.user] if g.user else []
+                session.add(new_slice)
+                session.flush()
+                new_slice.dashboards.append(dash)
+                old_to_new_sliceids['{}'.format(slc.id)] = \
+                    '{}'.format(new_slice.id)
+            for d in data['positions']:
+                d['slice_id'] = old_to_new_sliceids[d['slice_id']]
+        else:
+            dash.slices = original_dash.slices
         dash.params = original_dash.params
 
         self._set_dash_metadata(dash, data)
@@ -543,7 +1100,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         self.grant_owner_perms(dash.guardian_datasource())
         Number.log_number(g.user.username, Dashboard.model_type)
         Log.log_add(dash, Dashboard.model_type, g.user.id)
-        return json_response(data=dash_json)
+        return json_success(dash_json)
 
     @catch_exception
     @expose("/save_dash/<dashboard_id>/", methods=['GET', 'POST'])
@@ -558,7 +1115,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.merge(dash)
         session.commit()
         Log.log_update(dash, 'dashboard', g.user.id)
-        return json_response(message="SUCCESS")
+        return 'SUCCESS'
 
     @staticmethod
     def _set_dash_metadata(dashboard, data):
@@ -569,12 +1126,16 @@ class Superset(BaseSupersetView, PermissionManagement):
         dashboard.position_json = json.dumps(positions, indent=4, sort_keys=True)
         md = dashboard.params_dict
         dashboard.css = data['css']
+        dashboard.dashboard_title = data['dashboard_title']
 
         if 'filter_immune_slices' not in md:
             md['filter_immune_slices'] = []
+        if 'timed_refresh_immune_slices' not in md:
+            md['timed_refresh_immune_slices'] = []
         if 'filter_immune_slice_fields' not in md:
             md['filter_immune_slice_fields'] = {}
         md['expanded_slices'] = data['expanded_slices']
+        md['default_filters'] = data.get('default_filters', '')
         dashboard.json_metadata = json.dumps(md, indent=4)
 
     @catch_exception
@@ -591,30 +1152,331 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.merge(dash)
         session.commit()
         session.close()
-        return json_response(message="SLICES ADDED")
+        return 'SLICES ADDED'
 
     @catch_exception
     @connection_timeout
     @expose("/testconn/", methods=["POST", "GET"])
     def testconn(self):
         """Tests a sqla connection"""
-        args = json.loads(str(request.data, encoding='utf-8'))
-        uri = args.get('sqlalchemy_uri')
-        db_name = args.get('database_name')
-        if db_name:
-            database = (
-                db.session.query(Database).filter_by(database_name=db_name).first()
-            )
-            if database and uri == database.safe_sqlalchemy_uri():
-                uri = database.sqlalchemy_uri_decrypted
-        connect_args = eval(args.get('args', {})).get('connect_args', {})
-        connect_args = Database.append_args(connect_args)
-        engine = create_engine(uri, connect_args=connect_args)
         try:
+            username = g.user.username if g.user is not None else None
+            uri = request.json.get('uri')
+            db_name = request.json.get('name')
+            impersonate_user = request.json.get('impersonate_user')
+            database = None
+            if db_name:
+                database = (
+                    db.session
+                        .query(Database)
+                        .filter_by(database_name=db_name)
+                        .first()
+                )
+                if database and uri == database.safe_sqlalchemy_uri():
+                    # the password-masked uri was passed
+                    # use the URI associated with this database
+                    uri = database.sqlalchemy_uri_decrypted
+
+            configuration = {}
+
+            if database and uri:
+                url = make_url(uri)
+                db_engine = Database.get_db_engine_spec_for_backend(
+                    url.get_backend_name())
+                db_engine.patch()
+
+                masked_url = database.get_password_masked_url_from_uri(uri)
+                logging.info('Superset.testconn(). Masked URL: {0}'.format(masked_url))
+
+                configuration.update(
+                    db_engine.get_configuration_for_impersonation(uri,
+                                                                  impersonate_user,
+                                                                  username),
+                )
+
+            connect_args = (
+                request.json
+                    .get('extras', {})
+                    .get('engine_params', {})
+                    .get('connect_args', {}))
+
+            if configuration:
+                connect_args['configuration'] = configuration
+
+            connect_args = Database.append_args(connect_args)
+            engine = create_engine(uri, connect_args=connect_args)
             tables = engine.table_names()
-            return json_response(data=tables)
+            return json_success(json.dumps(tables, indent=4))
         except Exception as e:
             raise DatabaseException(str(e))
+
+    @expose('/recent_activity/<user_id>/', methods=['GET'])
+    def recent_activity(self, user_id):
+        """Recent activity (actions) for a given user"""
+        if request.args.get('limit'):
+            limit = int(request.args.get('limit'))
+        else:
+            limit = 1000
+
+        qry = (
+            db.session.query(Log, Dashboard, Slice)
+                .outerjoin(
+                Dashboard,
+                Dashboard.id == Log.dashboard_id,
+                )
+                .outerjoin(
+                Slice,
+                Slice.id == Log.slice_id,
+                )
+                .filter(
+                sqla.and_(
+                    ~Log.action.in_(('queries', 'shortner', 'sql_json')),
+                    Log.user_id == user_id,
+                    ),
+            )
+                .order_by(Log.dttm.desc())
+                .limit(limit)
+        )
+        payload = []
+        for log in qry.all():
+            item_url = None
+            item_title = None
+            if log.Dashboard:
+                item_url = log.Dashboard.url
+                item_title = log.Dashboard.dashboard_title
+            elif log.Slice:
+                item_url = log.Slice.slice_url
+                item_title = log.Slice.slice_name
+
+            payload.append({
+                'action': log.Log.action,
+                'item_url': item_url,
+                'item_title': item_title,
+                'time': log.Log.dttm,
+            })
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/csrf_token/', methods=['GET'])
+    def csrf_token(self):
+        return Response(
+            self.render_template('superset/csrf_token.json'),
+            mimetype='text/json',
+        )
+
+    @expose('/fave_dashboards_by_username/<username>/', methods=['GET'])
+    def fave_dashboards_by_username(self, username):
+        """This lets us use a user's username to pull favourite dashboards"""
+        user = security_manager.find_user(username=username)
+        return self.fave_dashboards(user.get_id())
+
+    @expose('/fave_dashboards/<user_id>/', methods=['GET'])
+    def fave_dashboards(self, user_id):
+        qry = (
+            db.session.query(Dashboard, FavStar.dttm)
+                .join(
+                FavStar,
+                sqla.and_(
+                    FavStar.user_id == int(user_id),
+                    FavStar.class_name == 'Dashboard',
+                    Dashboard.id == FavStar.obj_id,
+                    ),
+            )
+                .order_by(
+                FavStar.dttm.desc(),
+            )
+        )
+        payload = []
+        for o in qry.all():
+            d = {
+                'id': o.Dashboard.id,
+                'dashboard': o.Dashboard.dashboard_link(),
+                'title': o.Dashboard.dashboard_title,
+                'url': o.Dashboard.url,
+                'dttm': o.dttm,
+            }
+            if o.Dashboard.created_by:
+                user = o.Dashboard.created_by
+                d['creator'] = str(user)
+                d['creator_url'] = '/superset/profile/{}/'.format(
+                    user.username)
+            payload.append(d)
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/created_dashboards/<user_id>/', methods=['GET'])
+    def created_dashboards(self, user_id):
+        Dash = Dashboard  # noqa
+        qry = (
+            db.session.query(Dash)
+                .filter(
+                sqla.or_(
+                    Dash.created_by_fk == user_id,
+                    Dash.changed_by_fk == user_id,
+                    ),
+            )
+                .order_by(
+                Dash.changed_on.desc(),
+            )
+        )
+        payload = [{
+            'id': o.id,
+            'dashboard': o.dashboard_link(),
+            'title': o.dashboard_title,
+            'url': o.url,
+            'dttm': o.changed_on,
+        } for o in qry.all()]
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/user_slices', methods=['GET'])
+    @expose('/user_slices/<user_id>/', methods=['GET'])
+    def user_slices(self, user_id=None):
+        """List of slices a user created, or faved"""
+        if not user_id:
+            user_id = g.user.id
+        qry = (
+            db.session.query(Slice,FavStar.dttm)
+                .join(
+                FavStar,
+                sqla.and_(
+                    FavStar.user_id == int(user_id),
+                    FavStar.class_name == 'slice',
+                    Slice.id == FavStar.obj_id,
+                    ),
+                isouter=True
+            )
+                .filter(
+                sqla.or_(
+                    Slice.created_by_fk == user_id,
+                    Slice.changed_by_fk == user_id,
+                    FavStar.user_id == user_id,
+                    ),
+            )
+                .order_by(Slice.slice_name.asc())
+        )
+        payload = [{
+            'id': o.Slice.id,
+            'title': o.Slice.slice_name,
+            'url': o.Slice.slice_url,
+            'data': o.Slice.form_data,
+            'dttm': o.dttm if o.dttm else o.Slice.changed_on,
+            'viz_type': o.Slice.viz_type,
+        } for o in qry.all()]
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/created_slices', methods=['GET'])
+    @expose('/created_slices/<user_id>/', methods=['GET'])
+    def created_slices(self, user_id=None):
+        """List of slices created by this user"""
+        if not user_id:
+            user_id = g.user.id
+        qry = (
+            db.session.query(Slice)
+                .filter(
+                sqla.or_(
+                    Slice.created_by_fk == user_id,
+                    Slice.changed_by_fk == user_id,
+                    ),
+            )
+                .order_by(Slice.changed_on.desc())
+        )
+        payload = [{
+            'id': o.id,
+            'title': o.slice_name,
+            'url': o.slice_url,
+            'dttm': o.changed_on,
+            'viz_type': o.viz_type,
+        } for o in qry.all()]
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/fave_slices', methods=['GET'])
+    @expose('/fave_slices/<user_id>/', methods=['GET'])
+    def fave_slices(self, user_id=None):
+        """Favorite slices for a user"""
+        if not user_id:
+            user_id = g.user.id
+        qry = (
+            db.session.query(Slice, FavStar.dttm)
+                .join(
+                FavStar,
+                sqla.and_(
+                    FavStar.user_id == int(user_id),
+                    FavStar.class_name == 'slice',
+                    Slice.id == FavStar.obj_id,
+                    ),
+            )
+                .order_by(
+                FavStar.dttm.desc(),
+            )
+        )
+        payload = []
+        for o in qry.all():
+            d = {
+                'id': o.Slice.id,
+                'title': o.Slice.slice_name,
+                'url': o.Slice.slice_url,
+                'dttm': o.dttm,
+                'viz_type': o.Slice.viz_type,
+            }
+            if o.Slice.created_by:
+                user = o.Slice.created_by
+                d['creator'] = str(user)
+                d['creator_url'] = '/superset/profile/{}/'.format(
+                    user.username)
+            payload.append(d)
+        return json_success(
+            json.dumps(payload, default=utils.json_int_dttm_ser))
+
+    @expose('/warm_up_cache/', methods=['GET'])
+    def warm_up_cache(self):
+        """Warms up the cache for the slice or table.
+
+        Note for slices a force refresh occurs.
+        """
+        slices = None
+        session = db.session()
+        slice_id = request.args.get('slice_id')
+        table_name = request.args.get('table_name')
+        db_name = request.args.get('db_name')
+
+        if not slice_id and not (table_name and db_name):
+            return json_error_response(__(
+                'Malformed request. slice_id or table_name and db_name '
+                'arguments are expected'), status=400)
+        if slice_id:
+            slices = session.query(Slice).filter_by(id=slice_id).all()
+            if not slices:
+                return json_error_response(__(
+                    'Chart %(id)s not found', id=slice_id), status=404)
+        elif table_name and db_name:
+            SqlaTable = SourceRegistry.sources['table']
+            table = (
+                session.query(SqlaTable)
+                    .join(Database)
+                    .filter(
+                    Database.database_name == db_name or
+                    SqlaTable.table_name == table_name)
+            ).first()
+            if not table:
+                return json_error_response(__(
+                    "Table %(t)s wasn't found in the database %(d)s",
+                    t=table_name, s=db_name), status=404)
+            slices = session.query(Slice).filter_by(
+                datasource_id=table.id,
+                datasource_type=table.type).all()
+
+        for slc in slices:
+            try:
+                obj = slc.get_viz(force=True)
+                obj.get_json()
+            except Exception as e:
+                return json_error_response(utils.error_msg_from_exception(e))
+        return json_success(json.dumps(
+            [{'slice_id': slc.id, 'slice_name': slc.slice_name}
+             for slc in slices]))
 
     @catch_exception
     @expose("/favstar/<class_name>/<obj_id>/<action>/")
@@ -624,14 +1486,14 @@ class Superset(BaseSupersetView, PermissionManagement):
         count = 0
         favs = (
             session.query(FavStar)
-            .filter_by(class_name=class_name, obj_id=obj_id, user_id=g.user.get_id())
-            .all()
+                .filter_by(class_name=class_name, obj_id=obj_id, user_id=g.user.get_id())
+                .all()
         )
         # get obj name to make log readable
         obj = (
             session.query(str_to_model[class_name.lower()])
-            .filter_by(id=obj_id)
-            .one()
+                .filter_by(id=obj_id)
+                .one()
         )
 
         if action == 'select':
@@ -653,7 +1515,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         else:
             count = len(favs)
         session.commit()
-        return json_response(data={'count': count})
+        return json_success(json.dumps({'count': count}))
 
     @catch_exception
     @expose('/if_online/<class_name>/<obj_id>/')
@@ -676,58 +1538,159 @@ class Superset(BaseSupersetView, PermissionManagement):
         self.update_redirect()
         session = db.session()
         dash = session.query(Dashboard).filter_by(id=int(dashboard_id)).one()
-        dash_edit_perm = self.check_edit_perm(dash.guardian_datasource(),
-                                              raise_if_false=False)
-        dash_save_perm = dash_edit_perm
-        standalone = request.args.get("standalone") == "true"
-        context = dict(
-            user_id=g.user.get_id(),
-            dash_save_perm=dash_save_perm,
-            dash_edit_perm=dash_edit_perm,
-            standalone_mode=standalone,
-            need_capture=dash.need_capture,
-        )
+        datasources = set()
+        for slc in dash.slices:
+            datasource = slc.datasource
+            if datasource:
+                datasources.add(datasource)
+
+        if config.get('ENABLE_ACCESS_REQUEST'):
+            for datasource in datasources:
+                if datasource and not security_manager.datasource_access(datasource):
+                    flash(
+                        __(get_datasource_access_error_msg(datasource.name)),
+                        'danger')
+                    return redirect(
+                        'superset/request_access/?'
+                        'dashboard_id={dash.id}&'.format(**locals()))
+
+        # Hack to log the dashboard_id properly, even when getting a slug
+        def dashboard(**kwargs):  # noqa
+            pass
+        dashboard(dashboard_id=dash.id)
+        # TODO
+        # dash_edit_perm = self.check_edit_perm(dash.guardian_datasource(),
+        #                                       raise_if_false=False)
+        dash_edit_perm = check_ownership(dash, raise_if_false=False) and \
+                         security_manager.can_access('can_save_dash', 'Superset')
+        dash_save_perm = security_manager.can_access('can_save_dash', 'Superset')
+        superset_can_explore = security_manager.can_access('can_explore', 'Superset')
+        slice_can_edit = security_manager.can_access('can_edit', 'SliceModelView')
+
+        standalone_mode = request.args.get('standalone') == 'true'
+
+        dashboard_data = dash.data
+        dashboard_data.update({
+            'standalone_mode': standalone_mode,
+            'dash_save_perm': dash_save_perm,
+            'dash_edit_perm': dash_edit_perm,
+            'superset_can_explore': superset_can_explore,
+            'slice_can_edit': slice_can_edit,
+        })
+
+        bootstrap_data = {
+            'user_id': g.user.get_id(),
+            'dashboard_data': dashboard_data,
+            'datasources': {ds.uid: ds.data for ds in datasources},
+            'common': self.common_bootsrap_payload(),
+            'editMode': request.args.get('edit') == 'true',
+        }
+
+        if request.args.get('json') == 'true':
+            return json_success(json.dumps(bootstrap_data))
+
         return self.render_template(
-            "superset/dashboard.html",
-            dashboard=dash,
-            context=json.dumps(context),
-            standalone_mode=standalone,
+            'superset/dashboard.html',
+            entry='dashboard',
+            standalone_mode=standalone_mode,
+            title=dash.dashboard_title,
+            bootstrap_data=json.dumps(bootstrap_data),
         )
+
+    @expose('/log/', methods=['POST'])
+    def log(self):
+        return Response(status=200)
+
+    @expose('/sync_druid/', methods=['POST'])
+    def sync_druid_source(self):
+        """Syncs the druid datasource in main db with the provided config.
+
+        The endpoint takes 3 arguments:
+            user - user name to perform the operation as
+            cluster - name of the druid cluster
+            config - configuration stored in json that contains:
+                name: druid datasource name
+                dimensions: list of the dimensions, they become druid columns
+                    with the type STRING
+                metrics_spec: list of metrics (dictionary). Metric consists of
+                    2 attributes: type and name. Type can be count,
+                    etc. `count` type is stored internally as longSum
+                    other fields will be ignored.
+
+            Example: {
+                'name': 'test_click',
+                'metrics_spec': [{'type': 'count', 'name': 'count'}],
+                'dimensions': ['affiliate_id', 'campaign', 'first_seen']
+            }
+        """
+        payload = request.get_json(force=True)
+        druid_config = payload['config']
+        user_name = payload['user']
+        cluster_name = payload['cluster']
+
+        user = security_manager.find_user(username=user_name)
+        DruidDatasource = SourceRegistry.sources['druid']
+        DruidCluster = DruidDatasource.cluster_class
+        if not user:
+            err_msg = __("Can't find User '%(name)s', please ask your admin "
+                         'to create one.', name=user_name)
+            logging.error(err_msg)
+            return json_error_response(err_msg)
+        cluster = db.session.query(DruidCluster).filter_by(
+            cluster_name=cluster_name).first()
+        if not cluster:
+            err_msg = __("Can't find DruidCluster with cluster_name = "
+                         "'%(name)s'", name=cluster_name)
+            logging.error(err_msg)
+            return json_error_response(err_msg)
+        try:
+            DruidDatasource.sync_to_db_from_config(
+                druid_config, user, cluster)
+        except Exception as e:
+            logging.exception(utils.error_msg_from_exception(e))
+            return json_error_response(utils.error_msg_from_exception(e))
+        return Response(status=201)
 
     @catch_exception
     @expose("/sqllab_viz/", methods=['POST'])
     def sqllab_viz(self):
+        Dataset = SourceRegistry.sources['table']
         data = json.loads(request.form.get('data'))
         table_name = data.get('datasourceName')
-        viz_type = data.get('chartType')
+        template_params = data.get('templateParams')
         table = (
             db.session.query(Dataset)
-            .filter_by(dataset_name=table_name)
-            .first()
+                .filter_by(table_name=table_name)
+                .first()
         )
         if not table:
-            table = Dataset(dataset_name=table_name)
-        table.schema = data.get('schema')
+            table = Dataset(table_name=table_name)
         table.database_id = data.get('dbId')
+        table.schema = data.get('schema')
+        table.template_params = data.get('templateParams')
+        table.is_sqllab_view = True
         q = SupersetQuery(data.get('sql'))
         table.sql = q.stripped()
         db.session.add(table)
-        db.session.commit()
-        self.grant_owner_perms(table.guardian_datasource())
-        Number.log_number(g.user.username, Dataset.model_type)
-        Log.log_add(table, Dataset.model_type, g.user.id)
+        # TODO
+        # self.grant_owner_perms(table.guardian_datasource())
+        # Number.log_number(g.user.username, Dataset.model_type)
+        # Log.log_add(table, Dataset.model_type, g.user.id)
 
         cols = []
         dims = []
         metrics = []
         for column_name, config in data.get('columns').items():
             is_dim = config.get('is_dim', False)
+            SqlaTable = SourceRegistry.sources['table']
+            TableColumn = SqlaTable.column_class
+            SqlMetric = SqlaTable.metric_class
             col = TableColumn(
                 column_name=column_name,
-                expression=column_name,
                 filterable=is_dim,
                 groupby=is_dim,
                 is_dttm=config.get('is_date', False),
+                type=config.get('type', False),
             )
             cols.append(col)
             if is_dim:
@@ -736,43 +1699,34 @@ class Superset(BaseSupersetView, PermissionManagement):
             if agg:
                 if agg == 'count_distinct':
                     metrics.append(SqlMetric(
-                        metric_name="{agg}__{column_name}".format(**locals()),
-                        expression="COUNT(DISTINCT {column_name})"
+                        metric_name='{agg}__{column_name}'.format(**locals()),
+                        expression='COUNT(DISTINCT {column_name})'
                             .format(**locals()),
                             ))
                 else:
                     metrics.append(SqlMetric(
-                        metric_name="{agg}__{column_name}".format(**locals()),
-                        expression="{agg}({column_name})".format(**locals()),
+                        metric_name='{agg}__{column_name}'.format(**locals()),
+                        expression='{agg}({column_name})'.format(**locals()),
                     ))
         if not metrics:
             metrics.append(SqlMetric(
-                metric_name="count".format(**locals()),
-                expression="count(*)".format(**locals()),
+                metric_name='count'.format(**locals()),
+                expression='count(*)'.format(**locals()),
             ))
         table.ref_columns = cols
         table.ref_metrics = metrics
         db.session.commit()
-        params = {
-            'viz_type': viz_type,
-            'groupby': dims[0].column_name if dims else None,
-            'metrics': metrics[0].metric_name if metrics else None,
-            'metric': metrics[0].metric_name if metrics else None,
-            'since': '100 years ago',
-            'limit': '0',
-            'datasource_id': '{}'.format(table.id),
-        }
-        params = "&".join([k + '=' + v for k, v in params.items() if v])
-        return '/p/explore/table/{table.id}/?{params}'.format(**locals())
+        return self.json_response(json.dumps({ 'table_id': table.id,}))
 
     @catch_exception
     @expose("/table/<database_id>/<table_name>/<schema>/")
     def table(self, database_id, table_name, schema):
-        schema = None if schema in ('null', 'undefined') else schema
+        schema = utils.js_string_to_python(schema)
         mydb = db.session.query(Database).filter_by(id=database_id).one()
-        cols = []
+        payload_columns = []
+
         try:
-            t = mydb.get_columns(table_name, schema)
+            columns = mydb.get_columns(table_name, schema)
             if mydb.backend.lower() == 'inceptor':
                 indexes, primary_key, foreign_keys = [], [], []
             else:
@@ -780,7 +1734,7 @@ class Superset(BaseSupersetView, PermissionManagement):
                 primary_key = mydb.get_pk_constraint(table_name, schema)
                 foreign_keys = mydb.get_foreign_keys(table_name, schema)
         except Exception as e:
-            raise DatabaseException(str(e))
+            return json_error_response(utils.error_msg_from_exception(e))
         keys = []
         if primary_key and primary_key.get('constrained_columns'):
             primary_key['column_names'] = primary_key.pop('constrained_columns')
@@ -794,13 +1748,13 @@ class Superset(BaseSupersetView, PermissionManagement):
             idx['type'] = 'index'
         keys += indexes
 
-        for col in t:
-            dtype = ""
+        for col in columns:
+            dtype = ''
             try:
                 dtype = '{}'.format(col['type'])
-            except:
+            except Exception:
                 pass
-            cols.append({
+            payload_columns.append({
                 'name': col['name'],
                 'type': dtype.split('(')[0] if '(' in dtype else dtype,
                 'longType': dtype,
@@ -811,87 +1765,216 @@ class Superset(BaseSupersetView, PermissionManagement):
             })
         tbl = {
             'name': table_name,
-            'columns': cols,
-            'selectStar': mydb.select_sql(
-                table_name, schema=schema, show_cols=True, indent=True),
+            'columns': payload_columns,
+            'selectStar': mydb.select_star(
+                table_name, schema=schema, show_cols=True, indent=True,
+                cols=columns, latest_partition=False),
             'primaryKey': primary_key,
             'foreignKeys': foreign_keys,
             'indexes': keys,
         }
-        return json_response(data=tbl)
+        return json_success(json.dumps(tbl))
 
     @catch_exception
-    @expose("/extra_table_metadata/<database_id>/<table_name>/<schema>/")
+    @expose('/extra_table_metadata/<database_id>/<table_name>/<schema>/')
     def extra_table_metadata(self, database_id, table_name, schema):
-        # schema = None if schema in ('null', 'undefined') else schema
-        # mydb = db.session.query(Database).filter_by(id=database_id).one()
-        # payload = mydb.db_engine_spec.extra_table_metadata(
-        #     mydb, table_name, schema)
-        return json_response(data={})
+        schema = utils.js_string_to_python(schema)
+        mydb = db.session.query(Database).filter_by(id=database_id).one()
+        payload = mydb.db_engine_spec.extra_table_metadata(
+            mydb, table_name, schema)
+        return json_success(json.dumps(payload))
+
+    @expose('/select_star/<database_id>/<table_name>/')
+    def select_star(self, database_id, table_name):
+        mydb = db.session.query(Database).filter_by(id=database_id).first()
+        return self.render_template(
+            'superset/ajah.html',
+            content=mydb.select_star(table_name, show_cols=True),
+        )
 
     @expose("/theme/")
     def theme(self):
         return self.render_template('superset/theme.html')
+
+    @expose('/cached_key/<key>/')
+    def cached_key(self, key):
+        """Returns a key from the cache"""
+        resp = cache.get(key)
+        if resp:
+            return resp
+        return 'nope'
+
+    @expose('/cache_key_exist/<key>/')
+    def cache_key_exist(self, key):
+        """Returns if a key from cache exist"""
+        key_exist = True if cache.get(key) else False
+        status = 200 if key_exist else 404
+        return json_success(json.dumps({'key_exist': key_exist}), status=status)
 
     @catch_exception
     @expose("/results/<key>/")
     def results(self, key):
         """Serves a key off of the results backend"""
         if not results_backend:
-            return json_response(message="Results backend isn't configured",
-                                 status=500)
+            return json_error_response("Results backend isn't configured")
+
         blob = results_backend.get(key)
-        if blob:
-            json_payload = zlib.decompress(blob)
-            return json_response(data=json_payload)
-        else:
-            return json_response(
-                message="Data could not be retrived. You may want to re-run the query.",
+        if not blob:
+            return json_error_response(
+                'Data could not be retrieved. '
+                'You may want to re-run the query.',
                 status=410,
-                code=1
             )
+
+        query = db.session.query(Query).filter_by(results_key=key).one()
+        rejected_tables = security_manager.rejected_datasources(
+            query.sql, query.database, query.schema)
+        if rejected_tables:
+            return json_error_response(get_datasource_access_error_msg(
+                '{}'.format(rejected_tables)))
+
+        payload = utils.zlib_decompress_to_string(blob)
+        display_limit = app.config.get('DISPLAY_SQL_MAX_ROW', None)
+        payload_json = {}
+        if display_limit:
+            payload_json = json.loads(payload)
+            payload_json['data'] = payload_json['data'][:display_limit]
+        return json_success(
+            json.dumps(
+                payload_json, default=utils.json_iso_dttm_ser, ignore_nan=True))
+
+    @expose('/stop_query/', methods=['POST'])
+    def stop_query(self):
+        client_id = request.form.get('client_id')
+        try:
+            query = (
+                db.session.query(Query)
+                    .filter_by(client_id=client_id).one()
+            )
+            query.status = utils.QueryStatus.STOPPED
+            db.session.commit()
+        except Exception:
+            pass
+        return self.json_response('OK')
 
     @catch_exception
     @expose("/sql_json/", methods=['POST', 'GET'])
     def sql_json(self):
         """Runs arbitrary sql and returns and json"""
+        async = request.form.get('runAsync') == 'true'
         sql = request.form.get('sql')
         database_id = request.form.get('database_id')
-        schema = request.form.get('schema', None)
+        schema = request.form.get('schema') or None
+        template_params = json.loads(
+            request.form.get('templateParams') or '{}')
 
         session = db.session()
         mydb = session.query(Database).filter_by(id=database_id).first()
+
         if not mydb:
-            raise PropertyException(
+            json_error_response(
                 'Database with id {} is missing.'.format(database_id))
 
+        rejected_tables = security_manager.rejected_datasources(sql, mydb, schema)
+        if rejected_tables:
+            return json_error_response(get_datasource_access_error_msg(
+                '{}'.format(rejected_tables)))
+        session.commit()
+
+        select_as_cta = request.form.get('select_as_cta') == 'true'
         tmp_table_name = request.form.get('tmp_table_name')
-        # select_as_cta = request.form.get('select_as_cta') == 'true'
-        # if select_as_cta and mydb.force_ctas_schema:
-        #     tmp_table_name = '{}.{}'.format(
-        #         mydb.force_ctas_schema,
-        #         tmp_table_name
-        #     )
+        if select_as_cta and mydb.force_ctas_schema:
+            tmp_table_name = '{}.{}'.format(
+                mydb.force_ctas_schema,
+                tmp_table_name,
+            )
 
         query = Query(
             database_id=int(database_id),
-            limit=int(app.config.get('SQL_MAX_ROW', 100)),
+            limit=mydb.db_engine_spec.get_limit_from_sql(sql),
             sql=sql,
             schema=schema,
             select_as_cta=request.form.get('select_as_cta') == 'true',
             start_time=utils.now_as_float(),
             tab_name=request.form.get('tab'),
-            status=QueryStatus.RUNNING,
+            status=QueryStatus.PENDING if async else QueryStatus.RUNNING,
             sql_editor_id=request.form.get('sql_editor_id'),
             tmp_table_name=tmp_table_name,
             user_id=int(g.user.get_id()),
             client_id=request.form.get('client_id'),
         )
         session.add(query)
-        session.commit()
+        session.flush()
+        query_id = query.id
+        session.commit()  # shouldn't be necessary
+        if not query_id:
+            raise Exception(_('Query record was not created as expected.'))
+        logging.info('Triggering query_id: {}'.format(query_id))
 
-        data = sql_lab.get_sql_results(query.id, return_results=True)
-        return json_response(data=json.loads(data))
+        try:
+            template_processor = get_template_processor(
+                database=query.database, query=query)
+            rendered_query = template_processor.process_template(
+                query.sql,
+                **template_params)
+        except Exception as e:
+            return json_error_response(
+                'Template rendering failed: {}'.format(utils.error_msg_from_exception(e)))
+
+        # Async request.
+        if async:
+            logging.info('Running query on a Celery worker')
+            # Ignore the celery future object and the request may time out.
+            try:
+                sql_lab.get_sql_results.delay(
+                    query_id,
+                    rendered_query,
+                    return_results=False,
+                    store_results=not query.select_as_cta,
+                    user_name=g.user.username)
+            except Exception as e:
+                logging.exception(e)
+                msg = (
+                    'Failed to start remote query on a worker. '
+                    'Tell your administrator to verify the availability of '
+                    'the message queue.'
+                )
+                query.status = QueryStatus.FAILED
+                query.error_message = msg
+                session.commit()
+                return json_error_response('{}'.format(msg))
+
+            resp = json_success(json.dumps(
+                {'query': query.to_dict()}, default=utils.json_int_dttm_ser,
+                ignore_nan=True), status=202)
+            session.commit()
+            return resp
+
+        # Sync request.
+        try:
+            timeout = config.get('SQLLAB_TIMEOUT')
+            timeout_msg = (
+                'The query exceeded the {timeout} seconds '
+                'timeout.').format(**locals())
+            with utils.timeout(seconds=timeout,
+                               error_message=timeout_msg):
+                # pylint: disable=no-value-for-parameter
+                data = sql_lab.get_sql_results(
+                    query_id,
+                    rendered_query,
+                    return_results=True)
+            payload = json.dumps(
+                data,
+                default=utils.pessimistic_json_iso_dttm_ser,
+                ignore_nan=True,
+                encoding=None,
+            )
+        except Exception as e:
+            logging.exception(e)
+            return json_error_response('{}'.format(e))
+        if data.get('status') == QueryStatus.FAILED:
+            return json_error_response(payload=data)
+        return json_success(payload)
 
     @catch_exception
     @expose("/csv/<client_id>/")
@@ -908,75 +1991,139 @@ class Superset(BaseSupersetView, PermissionManagement):
         database = query.database
         session.close()
 
-        stored_in_hdfs = True if database.is_inceptor else False
         filename = quote('{}.csv'.format(query.name), encoding="utf-8")
-
-        if stored_in_hdfs:
-            # Beacuse of JVM attached threads, can't get super user 'pilot' 's token
-            # by Guardian api, thus can't create a APScheduler thread to drop old
-            # temp tables at backend
-            sql_lab.drop_inceptor_temp_table(g.user.username)
-
-            engine = database.get_sqla_engine(schema=query.schema, use_pool=False)
-            table_name, hdfs_path = sql_lab.store_sql_results_to_hdfs(sql, engine)
-
-            client = HDFSBrowser.get_client()
-            data = HDFSBrowser.read_folder(client, hdfs_path)
-            if data is None:  # File is too big
-                # return json_response('Data size is huge. You can go to HDFS [{}] to '
-                #                      'download it'.format(hdfs_path))
-                return redirect('/hdfs/?current_path={}'.format(hdfs_path))
-
-            if with_header is True:
-                columns = database.get_columns(table_name, schema=query.schema)
-                names = [c['name'] for c in columns]
-                names = ['"{}"'.format(n) for n in names]
-                name_str = ','.join(names)
-                tmp_barray = bytearray()
-                tmp_barray.extend(name_str.encode('utf8'))
-                tmp_barray.extend(b'\t\n')
-                data[0:0] = tmp_barray
-
-            sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
-            logging.info(sql)
-            engine.execute(sql)
-
-            data = HDFSBrowser.gzip_compress(data)
-            filename = '{}.gz'.format(filename)
-
-            response = Response(bytes(data), content_type='application/octet-stream')
-            response.headers['Content-Disposition'] = \
-                "attachment; filename={}".format(filename)
-            return response
+        blob = None
+        if results_backend and query.results_key:
+            logging.info(
+                'Fetching CSV from results backend '
+                '[{}]'.format(query.results_key))
+            blob = results_backend.get(query.results_key)
+        if blob:
+            logging.info('Decompressing')
+            json_payload = utils.zlib_decompress_to_string(blob)
+            obj = json.loads(json_payload)
+            columns = [c['name'] for c in obj['columns']]
+            df = pd.DataFrame.from_records(obj['data'], columns=columns)
+            logging.info('Using pandas to convert to CSV')
+            csv = df.to_csv(index=False, **config.get('CSV_EXPORT'))
         else:
-            df = query.database.get_df(sql, query.schema)
-            # TODO(bkyryliuk): add compression=gzip for big files.
-            csv = df.to_csv(index=False, header=with_header, encoding='utf-8')
-            response = Response(csv, mimetype='text/csv')
-            response.headers['Content-Disposition'] = \
-                'attachment; filename={}'.format(filename)
-            return response
+            logging.info('Running a query to turn into CSV')
+            stored_in_hdfs = True if database.is_inceptor else False
+            if stored_in_hdfs:
+                # Beacuse of JVM attached threads, can't get super user 'pilot' 's token
+                # by Guardian api, thus can't create a APScheduler thread to drop old
+                # temp tables at backend
+                sql_lab.drop_inceptor_temp_table(g.user.username)
+
+                engine = database.get_sqla_engine(schema=query.schema, use_pool=False)
+                table_name, hdfs_path = sql_lab.store_sql_results_to_hdfs(sql, engine)
+
+                client = HDFSBrowser.get_client()
+                data = HDFSBrowser.read_folder(client, hdfs_path)
+                if data is None:  # File is too big
+                    # return json_response('Data size is huge. You can go to HDFS [{}] to '
+                    #                      'download it'.format(hdfs_path))
+                    return redirect('/hdfs/?current_path={}'.format(hdfs_path))
+
+                if with_header is True:
+                    columns = database.get_columns(table_name, schema=query.schema)
+                    names = [c['name'] for c in columns]
+                    names = ['"{}"'.format(n) for n in names]
+                    name_str = ','.join(names)
+                    tmp_barray = bytearray()
+                    tmp_barray.extend(name_str.encode('utf8'))
+                    tmp_barray.extend(b'\t\n')
+                    data[0:0] = tmp_barray
+
+                sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
+                logging.info(sql)
+                engine.execute(sql)
+
+                data = HDFSBrowser.gzip_compress(data)
+                filename = '{}.gz'.format(filename)
+
+                response = Response(bytes(data), content_type='application/octet-stream')
+                response.headers['Content-Disposition'] = \
+                    "attachment; filename={}".format(filename)
+                return response
+            else:
+                df = database.get_df(sql, query.schema)
+                # TODO(bkyryliuk): add compression=gzip for big files.
+                csv = df.to_csv(index=False, header=with_header, encoding='utf-8')
+
+        response = Response(csv, mimetype='text/csv')
+        response.headers['Content-Disposition'] = (
+            'attachment; filename={}'.format(filename))
+        logging.info('Ready to return response')
+        return response
+
+    @expose('/fetch_datasource_metadata')
+    def fetch_datasource_metadata(self):
+        datasource_id, datasource_type = (
+            request.args.get('datasourceKey').split('__'))
+        datasource = SourceRegistry.get_datasource(
+            datasource_type, datasource_id, db.session)
+        # Check if datasource exists
+        if not datasource:
+            return json_error_response(DATASOURCE_MISSING_ERR)
+
+        # Check permission for datasource
+        if not security_manager.datasource_access(datasource):
+            return json_error_response(DATASOURCE_ACCESS_ERR)
+        return json_success(json.dumps(datasource.data))
 
     @catch_exception
     @expose("/queries/<last_updated_ms>/")
     def queries(self, last_updated_ms):
         """Get the updated queries."""
+        stats_logger.incr('queries')
+        if not g.user.get_id():
+            return json_error_response(
+                'Please login to access the queries.', status=403)
+
         # Unix time, milliseconds.
         last_updated_ms_int = int(float(last_updated_ms)) if last_updated_ms else 0
-
         # UTC date time, same that is stored in the DB.
         last_updated_dt = utils.EPOCH + timedelta(seconds=last_updated_ms_int / 1000)
 
         sql_queries = (
             db.session.query(Query)
-            .filter(
-                Query.user_id == g.user.id,
+                .filter(
+                Query.user_id == g.user.get_id(),
                 Query.changed_on >= last_updated_dt,
                 )
-            .all()
+                .all()
         )
         dict_queries = {q.client_id: q.to_dict() for q in sql_queries}
-        return json_response(data=dict_queries)
+        now = int(round(time.time() * 1000))
+        unfinished_states = [
+            utils.QueryStatus.PENDING,
+            utils.QueryStatus.RUNNING,
+        ]
+
+        queries_to_timeout = [
+            client_id for client_id, query_dict in dict_queries.items()
+            if (
+                query_dict['state'] in unfinished_states and (
+                    now - query_dict['startDttm'] >
+                    config.get('SQLLAB_ASYNC_TIME_LIMIT_SEC') * 1000
+                )
+            )
+        ]
+
+        if queries_to_timeout:
+            update(Query).where(
+                and_(
+                    Query.user_id == g.user.get_id(),
+                    Query.client_id in queries_to_timeout,
+                    ),
+            ).values(state=utils.QueryStatus.TIMED_OUT)
+
+            for client_id in queries_to_timeout:
+                dict_queries[client_id]['status'] = utils.QueryStatus.TIMED_OUT
+
+        return json_success(
+            json.dumps(dict_queries, default=utils.json_int_dttm_ser))
 
     @catch_exception
     @expose("/search_queries/")
@@ -1017,13 +2164,59 @@ class Superset(BaseSupersetView, PermissionManagement):
         query_limit = config.get('QUERY_SEARCH_LIMIT', 1000)
         sql_queries = (
             query.order_by(Query.start_time.asc())
-            .limit(query_limit)
-            .all()
+                .limit(query_limit)
+                .all()
         )
 
         dict_queries = [q.to_dict() for q in sql_queries]
 
-        return json_response(data=dict_queries)
+        return Response(
+            json.dumps(dict_queries, default=utils.json_int_dttm_ser),
+            status=200,
+            mimetype='application/json')
+
+    @app.errorhandler(500)
+    def show_traceback(self):
+        return render_template(
+            'superset/traceback.html',
+            error_msg=get_error_msg(),
+        ), 500
+
+    @expose('/welcome')
+    def welcome(self):
+        """Personalized welcome page"""
+        if not g.user or not g.user.get_id():
+            return redirect(appbuilder.get_url_for_login)
+
+        payload = {
+            'user': bootstrap_user_data(),
+            'common': self.common_bootsrap_payload(),
+        }
+
+        return self.render_template(
+            'superset/basic.html',
+            entry='welcome',
+            title='Superset',
+            bootstrap_data=json.dumps(payload, default=utils.json_iso_dttm_ser),
+        )
+
+    @expose('/profile/<username>/')
+    def profile(self, username):
+        """User profile page"""
+        if not username and g.user:
+            username = g.user.username
+
+        payload = {
+            'user': bootstrap_user_data(username, include_perms=True),
+            'common': self.common_bootsrap_payload(),
+        }
+
+        return self.render_template(
+            'superset/basic.html',
+            title=username + "'s profile",
+            entry='profile',
+            bootstrap_data=json.dumps(payload, default=utils.json_iso_dttm_ser),
+        )
 
     @catch_exception
     @expose("/sqllab/")
@@ -1037,3 +2230,51 @@ class Superset(BaseSupersetView, PermissionManagement):
             'superset/sqllab.html',
             bootstrap_data=json.dumps(d, default=utils.json_iso_dttm_ser)
         )
+
+    @expose('/slice_query/<slice_id>/')
+    def slice_query(self, slice_id):
+        """
+        This method exposes an API endpoint to
+        get the database query string for this slice
+        """
+        viz_obj = self.get_viz(slice_id)
+        if not security_manager.datasource_access(viz_obj.datasource):
+            return json_error_response(
+                DATASOURCE_ACCESS_ERR, status=401, link=config.get(
+                    'PERMISSION_INSTRUCTIONS_LINK'))
+        return self.get_query_string_response(viz_obj)
+
+
+@app.route('/health')
+def health():
+    return 'OK'
+
+
+@app.route('/healthcheck')
+def healthcheck():
+    return 'OK'
+
+
+@app.route('/ping')
+def ping():
+    return 'OK'
+
+
+@app.after_request
+def apply_caching(response):
+    """Applies the configuration's http headers to all responses"""
+    for k, v in config.get('HTTP_HEADERS').items():
+        response.headers[k] = v
+    return response
+
+
+# ---------------------------------------------------------------------
+# Redirecting URL from previous names
+class RegexConverter(BaseConverter):
+    def __init__(self, url_map, *items):
+        super(RegexConverter, self).__init__(url_map)
+        self.regex = items[0]
+
+
+app.url_map.converters['regex'] = RegexConverter
+
