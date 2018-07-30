@@ -12,7 +12,7 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import foreign, relationship
 
 from superset import utils
-from superset.models.slice import Slice
+# from superset.models.slice import Slice
 from superset.models.base import AuditMixinNullable, ImportMixin
 
 
@@ -47,15 +47,15 @@ class BaseDatasource(AuditMixinNullable, ImportMixin):
     params = Column(String(1000))
     perm = Column(String(1000))
 
-    @declared_attr
-    def slices(self):
-        return relationship(
-            'Slice',
-            primaryjoin=lambda: and_(
-                foreign(Slice.datasource_id) == self.id,
-                foreign(Slice.datasource_type) == self.type,
-                ),
-        )
+    # @declared_attr
+    # def slices(self):
+    #     return relationship(
+    #         'Slice',
+    #         primaryjoin=lambda: and_(
+    #             foreign(Slice.datasource_id) == self.id,
+    #             foreign(Slice.datasource_type) == self.type,
+    #             ),
+    #     )
 
     # placeholder for a relationship to a derivative of BaseColumn
     columns = []
