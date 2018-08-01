@@ -1,20 +1,24 @@
 import json
+import os
 import requests
 import time
 from datetime import datetime
-from flask import g, request
+from flask import g, request, flash, redirect
 from flask_babel import lazy_gettext as _
-from flask_appbuilder import expose
+from flask_appbuilder import expose, SimpleFormView
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.sqla.models import User
-
+from six import text_type
 import sqlalchemy as sqla
 from sqlalchemy import select, literal, cast, or_, and_
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import IntegrityError
+from werkzeug.utils import secure_filename
 
-from superset import app, db, models
+from superset import app, db, models, utils
+from superset.forms import CsvToDatabaseForm
 from superset.timeout_decorator import connection_timeout
-from superset.models import Database, HDFSConnection, Connection, Slice
+from superset.models import Database, HDFSConnection, Connection, Slice, Dataset
 from superset.exception import ParameterException, PermissionException
 from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
@@ -87,7 +91,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
         database_type = kwargs.get('database_type')
 
         query = db.session.query(Database, User) \
-                .outerjoin(User, Database.created_by_fk == User.id)
+            .outerjoin(User, Database.created_by_fk == User.id)
         query = query.filter(Database.database_name != config.get('METADATA_CONN_NAME'))
 
         if database_type:
@@ -170,7 +174,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
         self.check_release_perm(database.guardian_datasource())
         objects = self.release_affect_objects(database)
         info = _("Releasing connection {conn} will make these usable "
-                 "for other users: \nDataset: {dataset}, \nSlice: {slice}")\
+                 "for other users: \nDataset: {dataset}, \nSlice: {slice}") \
             .format(conn=objects.get('database'),
                     dataset=objects.get('dataset'),
                     slice=objects.get('slice'))
@@ -183,7 +187,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
         self.check_release_perm(database.guardian_datasource())
         objects = self.release_affect_objects(database)
         info = _("Changing connection {conn} to offline will make these "
-                 "unusable for other users: \nDataset: {dataset}, \nSlice: {slice}")\
+                 "unusable for other users: \nDataset: {dataset}, \nSlice: {slice}") \
             .format(conn=objects.get('database'),
                     dataset=objects.get('dataset'),
                     slice=objects.get('slice'))
@@ -199,9 +203,9 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
         online_dataset_ids = [dataset.id for dataset in online_datasets]
         online_slices = db.session.query(Slice) \
             .filter(
-                or_(Slice.datasource_id.in_(online_dataset_ids),
-                    Slice.database_id == id),
-                Slice.online == 1
+            or_(Slice.datasource_id.in_(online_dataset_ids),
+                Slice.database_id == id),
+            Slice.online == 1
         ).all()
         return {'database': [database, ],
                 'dataset': online_datasets,
@@ -214,7 +218,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
         self.check_delete_perm(database.guardian_datasource())
         objects = self.delete_affect_objects(database)
         info = _("Deleting connection {conn} will make these unusable: "
-                 "\nDataset: {dataset}, \nSlice: {slice}")\
+                 "\nDataset: {dataset}, \nSlice: {slice}") \
             .format(conn=objects.get('database'),
                     dataset=objects.get('dataset'),
                     slice=objects.get('slice'))
@@ -233,18 +237,18 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
 
         slices = db.session.query(Slice) \
             .filter(
-                or_(
-                    and_(
-                        or_(Slice.datasource_id.in_(online_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.online == 1
-                    ),
-                    and_(
-                        or_(Slice.datasource_id.in_(myself_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.created_by_fk == user_id
-                    )
+            or_(
+                and_(
+                    or_(Slice.datasource_id.in_(online_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.online == 1
+                ),
+                and_(
+                    or_(Slice.datasource_id.in_(myself_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.created_by_fk == user_id
                 )
+            )
         ).all()
         return {'database': [database, ],
                 'dataset': list(set(online_datasets + myself_datasets)),
@@ -371,9 +375,9 @@ class HDFSConnectionModelView(SupersetModelView, PermissionManagement):
 
         online_slices = db.session.query(Slice) \
             .filter(
-                or_(Slice.datasource_id.in_(online_dataset_ids),
-                    Slice.database_id == id),
-                Slice.online == 1
+            or_(Slice.datasource_id.in_(online_dataset_ids),
+                Slice.database_id == id),
+            Slice.online == 1
         ).all()
         return {'hdfs_connection': [hdfs_conn, ],
                 'dataset': online_datasets,
@@ -408,18 +412,18 @@ class HDFSConnectionModelView(SupersetModelView, PermissionManagement):
 
         slices = db.session.query(Slice) \
             .filter(
-                or_(
-                    and_(
-                        or_(Slice.datasource_id.in_(online_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.online == 1
-                    ),
-                    and_(
-                        or_(Slice.datasource_id.in_(myself_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.created_by_fk == user_id
-                    )
+            or_(
+                and_(
+                    or_(Slice.datasource_id.in_(online_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.online == 1
+                ),
+                and_(
+                    or_(Slice.datasource_id.in_(myself_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.created_by_fk == user_id
                 )
+            )
         ).all()
         return {'hdfs_connection': [hdfs_conn, ],
                 'dataset': list(set(online_datasets + myself_datasets)),
@@ -486,8 +490,8 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
             if len(db_ids) != len(objs):
                 raise ParameterException(_(
                     "Error parameter ids: {ids}, queried {num} connection(s)")
-                    .format(ids=db_ids, num=len(objs))
-                )
+                                         .format(ids=db_ids, num=len(objs))
+                                         )
             db_view = DatabaseView()
             for id in db_ids:
                 db_view.delete(id)
@@ -499,8 +503,8 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
             if len(hdfs_conn_ids) != len(objs):
                 raise ParameterException(_(
                     "Error parameter ids: {ids}, queried {num} connection(s)")
-                    .format(ids=hdfs_conn_ids, num=len(objs))
-                )
+                                         .format(ids=hdfs_conn_ids, num=len(objs))
+                                         )
             hdfs_view = HDFSConnectionModelView()
             for id in hdfs_conn_ids:
                 hdfs_view.delete(id)
@@ -528,8 +532,8 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
             if len(db_ids) != len(dbs):
                 raise ParameterException(_(
                     "Error parameter ids: {ids}, queried {num} connection(s)")
-                    .format(ids=db_ids, num=len(dbs))
-                )
+                                         .format(ids=db_ids, num=len(dbs))
+                                         )
         if hdfs_conn_ids:
             hconns = db.session.query(HDFSConnection).filter(
                 HDFSConnection.id.in_(hdfs_conn_ids)
@@ -537,8 +541,8 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
             if len(hdfs_conn_ids) != len(hconns):
                 raise ParameterException(_(
                     "Error parameter ids: {ids}, queried {num} connection(s)")
-                    .format(ids=hdfs_conn_ids, num=len(hconns))
-                )
+                                         .format(ids=hdfs_conn_ids, num=len(hconns))
+                                         )
 
         for d in dbs:
             datasets.extend(d.dataset)
@@ -554,18 +558,18 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
 
         slices = db.session.query(Slice) \
             .filter(
-                or_(
-                    and_(
-                        or_(Slice.datasource_id.in_(online_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.online == 1
-                    ),
-                    and_(
-                        or_(Slice.datasource_id.in_(myself_dataset_ids),
-                            Slice.database_id == id),
-                        Slice.created_by_fk == user_id
-                    )
+            or_(
+                and_(
+                    or_(Slice.datasource_id.in_(online_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.online == 1
+                ),
+                and_(
+                    or_(Slice.datasource_id.in_(myself_dataset_ids),
+                        Slice.database_id == id),
+                    Slice.created_by_fk == user_id
                 )
+            )
         ).all()
 
         info = _("Deleting connection {conn} will make these unusable: "
@@ -601,13 +605,13 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
         union_q = s1.union_all(s2).alias('connection')
         query = (
             db.session.query(union_q, User.username)
-            .outerjoin(User, User.id == union_q.c.user_id)
-            .filter(union_q.c.expose == 1)
+                .outerjoin(User, User.id == union_q.c.user_id)
+                .filter(union_q.c.expose == 1)
         )
         if connection_type:
             match_str = '{}%'.format(connection_type)
             query = query.filter(
-                    union_q.c.connection_type.ilike(match_str)
+                union_q.c.connection_type.ilike(match_str)
             )
         if filter:
             filter_str = '%{}%'.format(filter.lower())
@@ -697,3 +701,62 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
             'connection_type': query.c.connection_type,
             'owner': User.username
         }
+
+
+class DatabaseAsync(DatabaseView):
+    list_columns = [
+        'id', 'database_name',
+        'expose_in_sqllab', 'allow_ctas', 'force_ctas_schema',
+        'allow_run_async', 'allow_run_sync', 'allow_dml',
+        'allow_multi_schema_metadata_fetch',
+    ]
+
+
+class CsvToDatabaseView(SimpleFormView):
+    form = CsvToDatabaseForm
+    form_title = _('CSV to Database configuration')
+    add_columns = ['database', 'schema', 'table_name']
+
+    def form_get(self, form):
+        form.sep.data = ','
+        form.header.data = 0
+        form.mangle_dupe_cols.data = True
+        form.skipinitialspace.data = False
+        form.skip_blank_lines.data = True
+        form.infer_datetime_format.data = True
+        form.decimal.data = '.'
+        form.if_exists.data = 'append'
+
+    def form_post(self, form):
+        csv_file = form.csv_file.data
+        form.csv_file.data.filename = secure_filename(form.csv_file.data.filename)
+        csv_filename = form.csv_file.data.filename
+        path = os.path.join(config['UPLOAD_FOLDER'], csv_filename)
+        try:
+            utils.ensure_path_exists(config['UPLOAD_FOLDER'])
+            csv_file.save(path)
+            table = Dataset(table_name=form.name.data)
+            table.database = form.data.get('con')
+            table.database_id = table.database.id
+            table.database.db_engine_spec.create_table_from_csv(form, table)
+        except Exception as e:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            message = 'Table name {} already exists. Please pick another'.format(
+                form.name.data) if isinstance(e, IntegrityError) else text_type(e)
+            flash(message, 'danger')
+            return redirect('/csvtodatabaseview/form')
+
+        os.remove(path)
+        # Go back to welcome page / splash screen
+        db_name = table.database.database_name
+        message = _('CSV file "{0}" uploaded to table "{1}" in database "{2}"'
+                    .format(csv_filename, form.name.data, db_name))
+        flash(message, 'info')
+        return redirect('/tablemodelview/list/')
+
+
+class DatabaseTablesAsync(DatabaseView):
+    list_columns = ['id', 'all_table_names', 'all_schema_names']

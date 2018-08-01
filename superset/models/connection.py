@@ -328,7 +328,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
 
     @property
     def sql_url(self):
-        return '/p/sql/{}/'.format(self.id)
+        return '/superset/sql/{}/'.format(self.id)
 
     def get_dialect(self):
         sqla_url = make_url(self.sqlalchemy_uri_decrypted)
@@ -337,7 +337,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
     @classmethod
     def append_args(cls, connect_args):
         def get_keytab(username, password):
-            dir = config.get('GLOBAL_FOLDER', '/tmp/pilot')
+            dir = config.get('GLOBAL_FOLDER', '/tmp/superset')
             if not os.path.exists(dir):
                 os.makedirs(dir)
             path = os.path.join(dir, '{}.keytab'.format(username))

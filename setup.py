@@ -43,7 +43,7 @@ with open(os.path.join(PACKAGE_DIR, 'version_info.json'), 'w') as version_file:
 
 
 setup(
-    name='pilot',
+    name='superset',
     description=(
         'A modern, enterprise-ready business intelligence web application'),
     long_description=long_description,
@@ -51,15 +51,16 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    scripts=['superset/bin/pilot'],
+    scripts=['superset/bin/superset'],
     install_requires=[
         'bleach',
-        'boto3>=1.4.6',
-        'botocore>=1.7.0, <1.8.0',
+        'boto3==1.4.7',
+        'botocore==1.7.48',
         'celery>=4.2.0',
         'colorama',
         'contextlib2',
         'cryptography',
+        'cx_Oracle==5.3',
         'flask<1.0.0',
         'flask-appbuilder==1.10.0',  # known db migration with 1.11+
         'flask-caching',
@@ -75,6 +76,7 @@ setup(
         'humanize',
         'idna',
         'markdown',
+        'mysqlclient==1.3.10',
         'pandas',
         'parsedatetime',
         'pathlib2',
