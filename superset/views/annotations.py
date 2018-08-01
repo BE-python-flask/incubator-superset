@@ -41,21 +41,3 @@ class AnnotationLayerModelView(SupersetModelView, DeleteMixin):
     list_columns = ['id', 'name']
     edit_columns = ['name', 'descr']
     add_columns = edit_columns
-
-
-# appbuilder.add_view(
-#     AnnotationLayerModelView,
-#     'Annotation Layers',
-#     label=__('Annotation Layers'),
-#     icon='fa-comment',
-#     category='Manage',
-#     category_label=__('Manage'),
-#     category_icon='')
-# appbuilder.add_view(
-#     AnnotationModelView,
-#     'Annotations',
-#     label=__('Annotations'),
-#     icon='fa-comments',
-#     category='Manage',
-#     category_label=__('Manage'),
-#     category_icon='')

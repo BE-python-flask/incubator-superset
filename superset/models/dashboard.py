@@ -117,9 +117,9 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
             default_filters = json_metadata.get('default_filters')
             if default_filters:
                 filters = parse.quote(default_filters.encode('utf8'))
-                return '/p/dashboard/{}/?preselect_filters={}'.format(
+                return '/superset/dashboard/{}/?preselect_filters={}'.format(
                     self.slug or self.id, filters)
-        return '/p/dashboard/{}/'.format(self.id)
+        return '/superset/dashboard/{}/'.format(self.id)
 
     @property
     def datasources(self):
@@ -145,7 +145,7 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
             'id': self.id,
             'metadata': self.params_dict,
             'css': self.css,
-            'dashboard_title': self.dashboard_title,
+            'dashboard_title': self.name,
             'slug': self.slug,
             'slices': [slc.data for slc in self.slices],
             'position_json': positions,

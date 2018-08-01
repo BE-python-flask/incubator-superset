@@ -23,6 +23,9 @@ appbuilder.add_view(
 appbuilder.add_view_no_menu(core.Superset)
 appbuilder.add_view_no_menu(core.KV)
 appbuilder.add_view_no_menu(core.R)
+# appbuilder.add_view_no_menu(core.CssTemplateModelView)
+# appbuilder.add_view_no_menu(core.CssTemplateAsyncModelView)
+
 appbuilder.add_view(
     dashboard.DashboardModelView,
     "Dashboards",
@@ -30,6 +33,9 @@ appbuilder.add_view(
     icon="fa-dashboard",
     category='',
     category_icon='')
+# appbuilder.add_view_no_menu(dashboard.DashboardModelViewAsync)
+# appbuilder.add_view_no_menu(dashboard.DashboardAddView)
+
 appbuilder.add_view(
     slice.SliceModelView,
     "Slices",
@@ -37,6 +43,8 @@ appbuilder.add_view(
     icon="fa-bar-chart",
     category="",
     category_icon='')
+# appbuilder.add_view_no_menu(slice.SliceAsync)
+# appbuilder.add_view_no_menu(slice.SliceAddView)
 
 appbuilder.add_view_no_menu(connection.ConnectionView)
 appbuilder.add_view_no_menu(connection.HDFSConnectionModelView)
@@ -60,22 +68,30 @@ appbuilder.add_view(
     category_label=__("Datasource"),
     icon='fa-table',)
 
-appbuilder.add_view_no_menu(sql_lab.QueryView)
 appbuilder.add_view_no_menu(sql_lab.SQLLab)
+appbuilder.add_view_no_menu(sql_lab.SavedQueryViewApi)
+appbuilder.add_view_no_menu(sql_lab.SavedQueryView)
+appbuilder.add_view_no_menu(sql_lab.QueryView)
 appbuilder.add_link(
     'SQL Editor',
-    href='/p/sqllab',
+    href='/superset/sqllab',
     category_icon="fa-flask",
     icon="fa-flask",
     category='SQL Lab',
     category_label=__("SQL Lab"),)
 appbuilder.add_link(
     'Query Search',
-    href='/p/sqllab#search',
+    href='/superset/sqllab#search',
     icon="fa-search",
     category_icon="fa-flask",
     category='SQL Lab',
     category_label=__("SQL Lab"),)
+appbuilder.add_link(
+    __('Saved Queries'),
+    href='/sqllab/my_queries/',
+    icon='fa-save',
+    category='SQL Lab')
+
 
 appbuilder.add_view_no_menu(hdfs.HDFSBrowser)
 appbuilder.add_link(

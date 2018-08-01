@@ -178,7 +178,7 @@ class AuditMixinNullable(AuditMixin):
     def _user_link(self, user):
         if not user:
             return ''
-        url = '/p/profile/{}/'.format(user.username)
+        url = '/superset/profile/{}/'.format(user.username)
         return Markup('<a href="{}">{}</a>'.format(url, escape(user) or ''))
 
     @renders('created_by')
@@ -255,7 +255,7 @@ class Queryable(object):
         if self.default_endpoint:
             return self.default_endpoint
         else:
-            return "/p/explore/{obj.type}/{obj.id}/" \
+            return "/superset/explore/{obj.type}/{obj.id}/" \
                    "?datasource_id={obj.id}&datasource_type=table"\
                 .format(obj=self)
 

@@ -545,12 +545,12 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
 
 class DashboardModelViewAsync(DashboardModelView):  # noqa
     list_columns = [
-        'id', 'dashboard_link', 'creator', 'modified', 'dashboard_title',
+        'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
     ]
     label_columns = {
         'dashboard_link': _('Dashboard'),
-        'dashboard_title': _('Title'),
+        'name': _('Title'),
         'creator': _('Creator'),
         'modified': _('Modified'),
     }
@@ -558,7 +558,7 @@ class DashboardModelViewAsync(DashboardModelView):  # noqa
 
 class DashboardAddView(DashboardModelView):  # noqa
     list_columns = [
-        'id', 'dashboard_link', 'creator', 'modified', 'dashboard_title',
+        'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
     ]
     show_columns = list(set(DashboardModelView.edit_columns + list_columns))

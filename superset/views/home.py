@@ -237,7 +237,7 @@ class Home(BaseSupersetView, PermissionManagement):
             slice_params['slice_id'] = row[3]
             slice_params['json'] = "false"
             slice_params['slice_name'] = row[0]
-            href = Href("/p/explore/table/{}/".format(row[4]))
+            href = Href("/superset/explore/table/{}/".format(row[4]))
             rows.append({'name': row[0], 'count': row[1], 'link': href(slice_params)})
             index += 1
         return rows

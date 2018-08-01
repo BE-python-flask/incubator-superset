@@ -171,7 +171,7 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
             form_data['cache_timeout'] = self.cache_timeout
         return form_data
 
-    def get_explore_url(self, base_url='/p/explore', overrides=None):
+    def get_explore_url(self, base_url='/superset/explore', overrides=None):
         overrides = overrides or {}
         form_data = {'slice_id': self.id}
         form_data.update(overrides)
@@ -187,7 +187,7 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
     @property
     def explore_json_url(self):
         """Defines the url to access the slice"""
-        return self.get_explore_url('/p/explore_json')
+        return self.get_explore_url('/superset/explore_json')
 
     @property
     def edit_url(self):
