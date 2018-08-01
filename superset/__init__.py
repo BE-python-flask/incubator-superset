@@ -42,8 +42,8 @@ conf = app.config
 # Handling manifest file logic at app start
 #################################################################
 MANIFEST_FILE = APP_DIR + '/static/assets/dist/manifest.json'
+FEATURE_GOGGLES = APP_DIR + '/static/assets/featureToggles.json'
 manifest = {}
-
 
 def parse_manifest_json():
     global manifest
@@ -53,6 +53,13 @@ def parse_manifest_json():
     except Exception:
         pass
 
+def parse_feature_toggles():
+    global toggles
+    try:
+        with open(FEATURE_GOGGLES, 'r') as f:
+            toggles = json.load(f)
+    except Exception:
+        pass
 
 def get_manifest_file(filename):
     if app.debug:
@@ -61,11 +68,15 @@ def get_manifest_file(filename):
 
 
 parse_manifest_json()
-
+parse_feature_toggles()
 
 @app.context_processor
 def get_js_manifest():
     return dict(js_manifest=get_manifest_file)
+@app.context_processor
+def get_feature_toggles():
+    t = json.dumps(toggles)
+    return dict(feature_toggles=t)
 
 #################################################################
 

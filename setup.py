@@ -43,7 +43,7 @@ with open(os.path.join(PACKAGE_DIR, 'version_info.json'), 'w') as version_file:
 
 
 setup(
-    name='superset',
+    name='pilot',
     description=(
         'A modern, enterprise-ready business intelligence web application'),
     long_description=long_description,
@@ -51,7 +51,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
-    scripts=['superset/bin/superset'],
+    scripts=['superset/bin/pilot'],
     install_requires=[
         'bleach',
         'boto3>=1.4.6',
@@ -88,7 +88,7 @@ setup(
         'simplejson>=3.15.0',
         'six',
         'sqlalchemy',
-        'sqlalchemy-utils',
+        'sqlalchemy-utils==0.32.7',
         'sqlparse',
         'tableschema',
         'thrift>=0.9.3',

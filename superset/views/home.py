@@ -515,7 +515,7 @@ class Home(BaseSupersetView, PermissionManagement):
             return redirect(appbuilder.get_url_for_login)
         self.init_examples_perms()
         self.update_redirect()
-        return self.render_template('superset/home.html')
+        return self.render_template('superset/home.html', entry='home')
 
     @catch_exception
     @expose('/alldata/')
