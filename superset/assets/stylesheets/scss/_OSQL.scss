@@ -1,0 +1,250 @@
+.set-DS{
+    padding:20px;
+    .Untitled-list{
+        display:flex;
+        align-items: center;
+        .tablist{
+            display:flex;
+            border:$borderStyle;
+            border-bottom:0;
+            li{
+                display:flex;
+                cursor:pointer;
+                align-items: center;
+                padding:15px 10px;
+                border-radius:3px 3px 0 0;
+                background-color:#f5f8fa;
+                border-left: 1px solid #f5f8fa;
+                border-right:1px solid #f5f8fa;
+                border:1px solid #f5f8fa;
+                position:relative;
+                .pull-menu{
+                    top:53px;
+                    li{
+                        margin-right:0;
+                    }
+                }
+                .close{
+                    position:absolute;
+                    top:-6px;
+                    right:-4px;
+                    width:13px;
+                    height:13px;
+                    background-color:#f9be00;
+                    border-radius: 50%;
+                    display:none;
+                    svg{
+                        position:absolute;
+                        top:3px;
+                        right:3px;
+                        fill:#fff;
+                        width:6px;
+                        height:6px;
+                    }
+                }
+                strong{
+                    color:#a8aab7;
+                    font-size:16px;
+                    padding:0 24px 0 5px;
+                }
+                .arrow{
+                    border-color:#867d7d;
+                    border-width: 2px;
+                    width:6px;
+                    height:6px;
+                }
+            }
+            .active{
+                strong{
+                    color:#354052;
+                }
+                border-top:2px solid #0083f8;
+                border-right:$borderStyle;
+                border-left:$borderStyle;
+                background-color:#fff;
+            }
+        }
+        .add-titled{
+            width:26px;
+            height:26px;
+            display:flex;
+            border-radius: 5px;
+            justify-content: center;
+            align-items: center;
+            background-color:rgba(0,137,247,0.2);
+            margin-left:20px;
+
+            svg{
+                fill:#0089f7;
+                width:12px;
+                height:12px;
+            }
+        }
+    }
+    .set-DS-type{
+        display:flex;
+        background-color:#fff;
+        border:$borderStyle;
+        border-radius: 4px;
+        padding-top:25px;
+        .compile-DS{
+            border-right:2px solid #dfe3e9;
+            background-color:#fff;
+            width:350px;
+            box-sizing: border-box;
+            padding:0 10px;
+            .select-type{
+                .select-type-module{
+                    margin-bottom:20px;
+                    h3{
+                        font-size: 12px;
+                        color:#7c8ca5;
+                        padding-bottom:10px;
+                    }
+                    .sel-type{
+                        strong{
+                            color:#354052;
+                        }
+                    }
+                }
+            }
+            .DS-type-list{
+                .Untitled-Query{
+                    display:flex;
+                    justify-content: space-between;
+                    h2{
+                        display:flex;
+                        align-items: center;
+                        span{
+                            padding-right:8px;
+                            color:#354052;
+                            font-size:16px;
+                        }
+                        .arrow{
+                            border-color: #0089f7;
+                            width:6px;
+                            height:6px;
+                        }
+                    }
+                    .record-list-svg{
+                        li{
+                            margin-right:0;
+
+                        }
+                    }
+                }
+                .Untitled-Query-data{
+                    padding:15px 0;
+                    ul{
+                        li{
+                            display:flex;
+                            justify-content: space-between;
+                            span{
+                                color:#354052;
+                                font:12px/30px Miscrosoft YaHei;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .DS-process{
+            flex:1;
+            padding:0 10px 10px 10px;
+            h2{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                svg{
+                    fill:#fff;
+                }
+            }
+            .code-area{
+                  textarea{
+                      height:310px;
+                      width: 100%;
+                      border-radius: 4px;
+                      background-color:#f2f3f5;
+                  }
+            }
+            .results-and-history{
+                .search-result-list{
+                    @include border();
+                    padding:15px 0;
+                }
+                .Results-set{
+                    ul{
+                        display: flex;
+                        justify-content: flex-end;
+                        li{
+                            position: relative;
+                            margin-right:10px;
+                            svg{
+                                fill:#2acc28;
+                            }
+                            .ss-middle-btn,.ss-small-btn{
+                                border-radius: 4px;
+                                border:$borderStyle;
+                                color:#a8aab7;
+                            }
+                            .search{
+                                width:14px;
+                                height:14px;
+                                position:absolute;
+                                top:10px;
+                                right:10px;
+                            }
+                            input{
+                                height:34px;
+                                @include border();
+                            }
+                        }
+
+                    }
+                }
+                .search-result{
+                    padding-top:8px;
+                    ol{
+                        display:flex;
+                        li{
+                            flex:1;
+                            height:40px;
+                            font:12px/35px Miscrosoft YaHei;
+
+                        }
+                        li:first-child{
+                            span{
+                                padding-left:25px;
+                            }
+                        }
+                    }
+                    ol{
+                        background-color:#f5f8fa;
+                    }
+                    ul{
+                        display: flex;
+                        border-bottom: $borderStyle;
+                        li{
+                            flex:1;
+                            height:35px;
+                            font:12px/35px Miscrosoft YaHei;
+
+                        }
+                        li:first-child{
+                            span{
+                                padding-left:25px;
+                            }
+                        }
+                    }
+                    ul:last-child{
+                        border-bottom:0;
+                    }
+                    ul:hover{
+                        background-color:#f1f4f8;
+                    }
+                }
+            }
+
+        }
+    }
+}

@@ -1,0 +1,91 @@
+//global variable
+$borderStyleNormal: solid 1px #dfe3e9;
+$borderStyleFocus: solid 1px #66afe9;
+$borderStyleWarning: solid 1px #ff1111;
+$borderRadius: 4px;
+$smFontSize: 12px;
+$mdFontSize: 14px;
+$lgFontSize: 16px;
+
+$commonFontColor: #7f8fa4;
+$btnGreen: #2acc28;
+$box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px rgba(102, 175, 233, .6);
+
+@mixin tp-input-style() {
+    width: 100%;
+    padding: 10px;
+    color: rgba(0, 0, 0, 0.65);
+    border: $borderStyleNormal;
+    border-radius: $borderRadius;
+    font-size: $smFontSize;
+    &:focus {
+        outline: none;
+        border: $borderStyleFocus;
+        border-radius: $borderRadius;
+        box-shadow: $box-shadow;
+    }
+}
+
+@mixin tp-btn-style() {
+    border-radius:$borderRadius;
+    text-align:center;
+    color:#fff;
+    height:34px;
+    line-height: 34px;
+    font-size: $lgFontSize;
+}
+
+.tp-btn{
+    @include tp-btn-style;
+}
+.tp-btn-middle{
+    width:120px;
+}
+.tp-btn-small{
+    width:80px;
+}
+.tp-btn-primary{
+    background-color: $btnGreen;
+}
+.tp-btn-grey{
+    color: $commonFontColor;
+    background-color: rgb(221, 221, 221);
+}
+.tp-btn-white{
+    color: $commonFontColor;
+    background-color: #ffffff;
+}
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tp-input {
+    @include tp-input-style;
+    height: 32px;
+}
+
+.tp-textarea {
+    @include tp-input-style;
+    resize: none;
+}
+
+.tp-input-warning, .tp-textarea-warning {
+    border: $borderStyleWarning;
+}
+
+.ant-select .ant-select-selection {
+    border: $borderStyleNormal;
+}
+
+.none{
+    display: none;
+}
+
+.ant-tooltip-inner {
+    max-width: 330px !important;
+}
+
+.ant-alert-with-description .ant-alert-description {
+    word-break: break-all;
+}

@@ -1,0 +1,244 @@
+.query-search-page {
+	#search-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+
+		.page-title {
+			flex: 1;
+			font-size: 16px;
+			color: #354052;
+		}
+
+		.select-user {
+			width: 120px;
+			margin-right: 10px;
+		}
+
+		.select-database {
+			margin-right: 10px;
+			width: 120px;
+		}
+
+		.search-result {
+			margin-right: 10px;
+			width: 245px;
+
+			input {
+				height: 34px;
+			}
+		}
+
+		.select-from {
+			margin-right: 10px;
+			width: 120px;
+		}
+
+		.select-to {
+			margin-right: 10px;
+			width: 120px;
+		}
+
+		.select-status {
+			margin-right: 10px;
+			width: 120px;
+		}
+
+		.search-button {
+			width: 90px;
+			height: 34px;
+			border-radius: 4px;
+			background-color: #279cf2;
+			border-color: #279cf2;
+			font-size: 14px;
+
+			i {
+				margin-right: 6px;
+			}
+		}
+
+		.Select-control {
+			height: 32px;
+		}
+
+		.Select-placeholder {
+			height: 32px;
+			line-height: 32px;
+		}
+
+		.Select-input {
+			height: 32px;
+		}
+	}
+
+	.scrollbar-container {
+		margin-top: 16px;
+	}
+
+	.QueryTable {
+		margin-top: 0px;
+		background-color: #ffffff;
+		border-radius: 4px;
+		border: solid 1px #e6eaee;
+
+		.table {
+			thead {
+				th {
+					height: 28px;
+					line-height: 28px;
+					font-size: 14px;
+					color: #7f8fa4;
+					border-bottom: none;
+
+					&:first-child {
+						padding-left: 20px;
+					}
+
+					&:focus {
+						outline: none;
+					}
+				}
+			}
+
+			.reactable-pagination {
+				border: none;
+				margin-top: 10px;
+
+				td {
+					text-align: center;
+					height: 46px;
+					line-height: 46px;
+
+					a {
+						float: none !important; 
+					}
+				}
+
+				.custom-pagination > .reactable-current-page {
+				    color: #fff;
+				    cursor: default;
+				    background-color: #2097f0;
+				    border-color: #2097f0;
+				}
+
+				.custom-pagination > a:first-child {
+				    border-top-left-radius: 4px;
+				    border-bottom-left-radius: 4px;
+				}
+
+				.custom-pagination > a:last-child {
+				    border-top-right-radius: 4px;
+				    border-bottom-right-radius: 4px;
+				    border-right-width: 1px;
+				} 
+
+				.custom-pagination > a {
+				    position: relative;
+				    float: left;
+				    padding: 6px 12px;
+				    line-height: 1.42857143;
+				    color: #279cf2;
+				    text-decoration: none;
+				    background-color: #fff;
+				    border: 1px solid #ddd;
+				    border-right-width: 0px;
+				}
+			}
+
+			tbody {
+
+				td {
+					vertical-align: middle;
+					
+				}
+
+				td[label='state'] {
+					padding: 0px;
+					div {
+						padding-left: 20px;
+						display: flex;
+						align-items: center;
+
+						.label {
+							width: 64px;
+							height: 28px;
+							font-size: 14px;
+							border-radius: 4px;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							margin: 0px;
+							padding: 0px;
+							font-weight: normal;
+						}
+
+						.label-danger {
+							background-color: #f9bed9;
+						}
+
+						.label-success {
+							background-color: #2acc28;
+							opacity: 0.5;
+						}
+
+						.label-warning {
+							background-color: #f9be00;
+						}
+
+						.Link {
+							margin-left: 4px;
+							font-size: 14px;
+						}
+					}
+				}
+
+				td[label='db'], td[label='user'], td[label='time'], td[label='rows'] {
+					color: #354052;
+					font-size: 14px;
+
+					button {
+						color: #354052;
+						font-size: 14px;
+
+					}
+				}
+
+				td[label='progress'] {
+					.progress {
+						margin: 0;
+					}
+				}
+
+				td[label='sql'] {
+					.well {
+						border-color: #f2f3f5;
+						border-radius: 4px;
+						background-color: #f2f3f5;
+
+					}
+				}
+
+				td[label='querylink'] {
+					a {
+						background-color: #ffffff !important;
+						outline: none !important;
+						border: none !important;
+						color: #279cf2;
+						display: inline-flex;
+					    align-items: center;
+					    font-size: 14px;
+						
+						i {
+							margin-top: 3px;
+    						margin-right: 4px;
+						}
+
+						&:focus {
+							color: #bbc5d5;
+						}
+					}
+				}
+			}
+		}
+	}
+}

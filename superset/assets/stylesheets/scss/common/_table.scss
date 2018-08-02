@@ -1,0 +1,63 @@
+.ant-table-wrapper {
+    width: 100%;
+}
+
+table {
+    thead.ant-table-thead > tr > th {
+        height:40px;
+        padding: 0;
+        font-size:12px;
+        color:#7f8fa4;
+        background-color:#fff;
+        border-bottom: 1px solid #e7e9ed;
+    }
+
+    tbody.ant-table-tbody > tr {
+        td {
+            height:50px;
+            font-size:14px;
+            font-weight: 400;
+            color:#7f8fa4;
+            padding: 0;
+            background-color:#fff;
+        }
+        td:first-child {
+            border-left: 2px solid #fff;
+        }
+    }
+
+    tbody.ant-table-tbody > tr:hover {
+        td {
+            background-color: #e7f3ff;
+        }
+        td:first-child {
+            border-left: 2px solid #249af1;
+        }
+    }
+}
+.table-add-slice table tbody.ant-table-tbody > tr td, .table-grant-perm table tbody.ant-table-tbody > tr td {
+    height: 40px;
+}
+.table-add-slice .ant-table-content .ant-table-body, .table-grant-perm .ant-table-content .ant-table-body {
+    max-height: 400px;
+    overflow: auto;
+}
+
+/* checkbox table css style */
+.ant-table-small .ant-table-header > table, .ant-table-small .ant-table-body > table {
+    padding: 0 !important;
+}
+
+/* slice table */
+.slice_container .dataTables_scrollBody {
+    width: 100% !important;
+    table {
+        width: 100% !important;
+    }
+}
+.slice_container .dataTables_scrollHeadInner {
+    width: 100% !important;
+    table {
+        width: 100% !important;
+    }
+}

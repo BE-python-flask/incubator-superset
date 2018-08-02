@@ -1,0 +1,330 @@
+.icon {
+    width: 16px;//default size
+    height: 16px;
+    cursor: pointer;
+    background-image:url(/static/assets/images/icon-img/icon.png);
+    display:block;
+}
+
+.icon-caret {
+    background-position: -296px -657px;
+    width: 16px;
+    height: 6px;
+    margin-left: 4px;
+}
+/***** dashboard slice page icon start ******/
+.icon-star {
+    background-position: -92px -132px;
+}
+.icon-star-fav {
+    background-position: -52px -211px;
+}
+.icon-star-active {
+    background-position:-211px -252px;
+}
+.icon-info {
+    background-position: -290px -251px;
+}
+.icon-perm {
+    width:16px;
+    height:16px;
+    background-position:-319px -610px;
+    &:hover {
+        background-position: -319px -572px;
+    }
+}
+.icon-refresh {
+    width: 20px;
+    height: 14px;
+    background-position: -130px -333px;
+    &:hover {
+        background-position: -129px -412px;
+    }
+}
+.icon-plus {
+    width: 16px;
+    height: 16px;
+    background-position: -251px -92px;
+    &:hover {
+        background-position: -212px -172px;
+    }
+}
+.icon-filter {
+    background-position: -278px -690px;
+    &:hover {
+        background-position: -304px -690px;
+    }
+}
+.icon-clock {
+    background-position: -251px -451px;
+    &:hover {
+        background-position: -212px -572px;
+    }
+}
+.icon-setting {
+    width: 16px;
+    height: 16px;
+    background-position: -212px -331px;
+    &:hover {
+        background-position: -212px -411px;
+    }
+}
+.icon-drag {
+    width: 14px;
+    height: 14px;
+    background-position: -253px -332px;
+    &:hover {
+        background-position: -253px -413px;
+    }
+}
+.icon-edit {
+    width: 15px;
+    height: 14px;
+    background-position: -253px -134px;
+    &:hover {
+        background-position: -212px -213px;
+    }
+}
+.icon-save {
+    width: 14px;
+    height: 14px;
+    background-position: -293px -332px;
+    &:hover {
+        background-position: -292px -413px;
+    }
+}
+.icon-email {
+    width: 19px;
+    height: 13px;
+    background-position: -272px -665px;
+    &:hover {
+        background-position: -11px -452px;
+    }
+}
+.icon-trash {
+    background-position: -292px -92px;
+    &:hover {
+        background-position: -251px -172px;
+    }
+}
+.icon-delete {
+    width: 14px;
+    height: 16px;
+    background-position: -12px -172px;
+    &:hover {
+        background-position: -292px -211px;
+    }
+}
+.icon-import {
+    background-position: -11px -131px;
+    &:hover {
+        background-position: -291px -171px;
+    }
+}
+.icon-upload {
+    background-position: -132px -452px;
+    &:hover {
+        background-position: -92px -572px;
+    }
+}
+
+.icon-export {
+    background-position: -52px -131px;
+    &:hover {
+        background-position: -12px -210px;
+    }
+}
+.icon-search {
+    width: 14px;
+    height: 14px;
+    background-position: -133px -133px;
+    &:hover {
+        background-position: -92px -212px;
+    }
+}
+.icon-table-mode {
+    width: 21px;
+    height: 13px;
+    background-position: -169px -134px;
+    &.active {
+        background-position: -129px -213px;
+    }
+}
+.icon-graph-mode {
+    width: 18px;
+    height: 18px;
+    background-position: -211px -132px;
+    &.active {
+        background-position: -170px -211px;
+    }
+}
+
+.icon-flow-refresh {
+    width: 22px;
+    height: 22px;
+    background-position: -212px -450px;
+    &:hover {
+        background-position: -172px -570px;
+    }
+}
+
+.icon-dashboard {
+    width: 19px;
+    height: 19px;
+    background-position: -250px -50px;
+}
+.icon-slice {
+    width: 18px;
+    height: 23px;
+    background-position: -291px -51px;
+}
+.icon-database-list {
+    width: 20px;
+    height: 21px;
+    background-position: -10px -90px;
+}
+.icon-edit-slice {
+    width: 22px;
+    height: 22px;
+    background-position: -10px -368px;
+}
+
+.icon-table {
+    width:25px;
+    height:22px;
+    background-position: -47px -90px;
+}
+/***** dashboard slice page icon end ******/
+
+/***** popup icon start ******/
+.icon-dashboard-popup {
+    width: 19px;
+    height: 14px;
+    background-position: -249px -252px;
+}
+.icon-slice-popup {
+    width: 13px;
+    height: 15px;
+    background-position: -13px -293px;
+}
+.icon-connect {
+    width:16px; height:16px;
+    background-position:-252px -292px;
+}
+.icon-connect-test {
+    width: 18px;
+    height: 19px;
+    background-position: -291px -290px;
+}
+.icon-close {
+    width: 14px;
+    height: 14px;
+    background-position: -52px -293px;
+}
+.icon-infor{
+    width:16px;
+    height:16px;
+    background-position:-290px -251px;
+}
+.icon-dataset {
+    width: 25px;
+    height: 22px;
+    background-position: -170px -490px;
+}
+.icon-open-sign {
+    width: 7px;
+    height: 4px;
+    transform:rotate(180deg);
+    background-position: -251px -695px;
+}
+.icon-close-sign {
+    width: 7px;
+    height: 4px;
+    background-position: -251px -695px;
+}
+/***** popup icon end ******/
+
+/*S: file browser*/
+.icon-text-hover{
+    width:18px;
+    height:18px;
+    background-position:-171px -490px;
+}
+.icon-download-hover{
+    width:16px;
+    height:15px;
+    background-position: -212px -492px;
+}
+.icon-file{
+    width: 16px;
+    height: 14px;
+    background-position: -132px -170px;
+}
+.icon-file-hover{
+    width:16px;
+    height:18px;
+    background-position: -252px -490px;
+}
+.icon-refresh-hover{
+    width:20px;
+    height:14px;
+    background-position: -129px -412px;
+}
+.icon-time-default{
+    background-position:-251px -452px;
+    width:16px;
+    height:16px;
+}
+.icon-user-default{
+    background-position:-14px -533px;
+    width:12px;
+    height:11px;
+}
+.icon-group-default{
+    background-position: -54px -533px;
+    width:12px;
+    height:12px;
+}
+.icon-storage－default{
+    background-position: -93px -533px;
+    width:14px;
+    height:14px;
+}
+.icon-pattern-default{
+    background-position: -135px -533px;
+    height:13px;
+    width:10px;
+}
+.icon-backfile-default{
+    background-position:-290px -450px;
+    width:21px;
+    height:18px;
+}
+.icon-backarrow-default{
+    background-position:-14px -493px;
+    width:11px;
+    height:12px;
+}
+.icon-backfile-openfile-warning{
+    background-position:-48px -490px;
+    width:24px;
+    height:19px;
+}
+.icon-disabledfile-info{
+    background-position:-90px -490px;
+    width:21px;
+    height:18px;
+}
+.icon-grayfile-info{
+    background-position:-132px -491px;
+    width:16px;
+    height:18px;
+}
+/*E: file browser*/
+
+.icon-internationalization {
+    background-position:-10px -685px;
+    width:17px;
+    height:17px;
+}
+

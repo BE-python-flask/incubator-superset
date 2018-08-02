@@ -21,13 +21,18 @@ module.exports = merge(common, {
         })
     ],
     module: {
-        rules: [
-            {
+        rules: [{
             test: /\.css$/,
             include: APP_DIR,
             use: [MiniCssExtractPlugin.loader, 'css-loader']
-          },
-          {
+        },{
+            test: /\.(scss|sass)$/,
+            use: [
+                MiniCssExtractPlugin.loader, // creates style nodes from JS strings
+                "css-loader", // translates CSS into CommonJS
+                "sass-loader" // compiles Sass to CSS
+            ]
+        },{
             test: /\.less$/,
             include: APP_DIR,
             use: [
@@ -35,7 +40,6 @@ module.exports = merge(common, {
                 'css-loader',
                 'less-loader'
             ]
-          },
-        ]
+        }]
     }
 });

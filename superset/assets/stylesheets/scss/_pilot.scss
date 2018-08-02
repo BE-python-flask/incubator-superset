@@ -1,0 +1,148 @@
+
+.pilot-panel {
+    margin: 0 50px;
+    background-color: #edf0f5;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 50px);
+    .panel-top {
+        display: flex;
+        justify-content: space-between;
+        margin: 15px 0;
+        .left {
+            display: flex;
+            align-items: center;
+            i {
+                display:inline-block;
+            }
+            span:nth-of-type(1){
+                font-size:18px;
+                color:#354052;
+                padding:0 10px;
+            }
+            span:nth-of-type(2){
+                font-size:14px;
+                color:#7f8fa4;
+            }
+            span:nth-of-type(3){
+                font-size:16px;
+                color:#ccd3da;
+                padding:0 10px;
+            }
+        }
+        .right .operations{
+            display:flex;
+            align-items:center;
+            .icon-list{
+                display: flex;
+                height:32px;
+                border:$borderStyle;
+                background-color:#fff;
+                border-radius: 4px;
+                margin:0 15px;
+                > li{
+                    width:40px;
+                    height:32px;
+                    border-right:$borderStyle;
+                    display:flex;
+                    justify-content:center;
+                    align-items:center;
+                    cursor:pointer;
+                }
+            }
+            .tab-btn {
+                margin:0 15px 0 0;
+                border: none;
+                border-radius: 4px;
+                overflow: hidden;
+                button {
+                    color:#9a9fa8;
+                    font:14px/32px Miscrosoft YaHei;
+                    text-align:center;
+                    width:80px;
+                    height:32px;
+                    background-color: #fff;
+                    .icon {
+                        display:inline-block;
+                        position:relative;
+                        top:3px;
+                        margin-right:5px;
+                    }
+                }
+
+                .active {
+                    background-color:#279cf2;
+                    color:#fff;
+                }
+            }
+            .search-input{
+                //margin-right:15px;
+                position:relative;
+                input {
+                    width:243px;
+                    height:32px;
+                }
+                i {
+                    position:absolute;
+                    top:9px;
+                    right:15px;
+                }
+            }
+            .view-btn{
+                display: flex;
+                a {
+                    width:40px;
+                    height:32px;
+                    background-color:#fff;
+                    border:$borderStyle;
+                    border-radius: 4px;
+                    display:flex;
+                    justify-content:center;
+                    align-items:center;
+                }
+                a:first-child {
+                    margin-right: 5px;
+                }
+            }
+        }
+    }
+    .panel-middle {
+        display: flex;
+        justify-content: center;
+        background-color: #fff;
+        .icon-group{
+            display: flex;
+        }
+        .entity-name {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .entity-description {
+            font-size: 12px;
+            color: #7f8fa4;
+        }
+        .entity-publish {
+            color: #333c48;
+        }
+        .entity-hover {
+            font-weight: bold;
+        }
+        .highlight {
+            cursor: pointer;
+            color: #279cf2;
+            font-weight: bold;
+        }
+        .icon-line {
+            width: 20px; //for alignment
+        }
+        td.ant-table-selection-column span > label.ant-checkbox-wrapper {
+            margin-bottom: 0;
+        }
+    }
+    .panel-bottom {
+        display: flex;
+        justify-content: center;
+        margin-top: 30px;
+        margin-bottom: 20px;
+    }
+}

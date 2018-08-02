@@ -13,26 +13,8 @@ module.exports = {
   node: {
     fs: 'empty',
   },
-  target: 'web',
   entry: {
-    // 'css-theme': APP_DIR + '/javascripts/css-theme.js',
-    // user: APP_DIR + '/javascripts/user.js',
     home: APP_DIR + '/src/home.jsx',
-    // sliceList: APP_DIR + '/javascripts/sliceList.js',
-    // databaseList: APP_DIR + '/javascripts/databaseList.js',
-    // tableList: APP_DIR + '/javascripts/tableList.js',
-    // hdfsList: APP_DIR + '/javascripts/hdfsList.js',
-    // dashboardEntry: APP_DIR + '/javascripts/dashboardEntry.js',
-
-    // common: APP_DIR + '/javascripts/common.js',
-    // dashboard: APP_DIR + '/javascripts/dashboard/Dashboard.jsx',
-    // explore: APP_DIR + '/javascripts/explore/explore.jsx',
-    // explorev2: APP_DIR + '/javascripts/explorev2/index.jsx',
-    // sqllab: APP_DIR + '/javascripts/SqlLab/index.jsx',
-    // standalone: APP_DIR + '/javascripts/standalone.js', // TODO:
-    // welcome: APP_DIR + '/javascripts/welcome.js',
-    // profile: APP_DIR + '/javascripts/profile/index.jsx'
-
     theme: APP_DIR + '/src/theme.js',
     common: APP_DIR + '/src/common.js',
     addSlice: APP_DIR + '/src/addSlice/index.jsx',
@@ -63,7 +45,6 @@ module.exports = {
         test: /datatables\.net.*/,
         use: 'imports-loader?define=>false',
       },
-      // style
       {
         test: /\.s?[ac]ss$/,
         include: APP_DIR,
@@ -73,21 +54,6 @@ module.exports = {
           "sass-loader" // compiles Sass to CSS
         ]
       },
-      /*{
-          test: /\.less$/,
-          include: APP_DIR,
-          use: [{
-              loader: 'style-loader'
-          }, {
-              loader: 'css-loader'
-          }, {
-              loader: 'less-loader',
-              options: {
-                  strictMath: true,
-                  noIeCompat: true
-              }
-          }]
-      }, */
       {
         test: /\.less$/,
         use: [{
@@ -98,15 +64,6 @@ module.exports = {
           loader: 'less-loader'
         }]
       },
-      // {
-      //   test: /\.less$/,
-      //   include: APP_DIR,
-      //   loader: ExtractTextPlugin.extract({
-      //     use: ['css-loader', 'less-loader'],
-      //     fallback: 'style-loader',
-      //   }),
-      // },
-
       // images
       /* for css linking images */
       {
@@ -140,7 +97,6 @@ module.exports = {
           }
         }
       },
-
       /* for react-map-gl overlays */
       {
         test: /\.react\.js$/,
@@ -153,7 +109,6 @@ module.exports = {
         use: 'ts-loader',
         exclude: /node_modules/
       },
-
       /* for font-awesome */
       {
         test: /\.woff(2)?(\?v=[0-9]\.[0-9]\.[0-9])?$/,

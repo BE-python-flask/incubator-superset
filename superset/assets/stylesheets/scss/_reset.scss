@@ -1,0 +1,83 @@
+body,div,article,button,dl,dt,dd,,ol,ul,li,h1,h2,h3,h4,h5,h6,pre,code,form,figure,section,aside,sub,sup,svg,fieldset,legend,input,span,strong,a,textarea,p,blockquote,th,td {
+	margin:0;
+	padding:0;
+	border:0;
+}
+html{
+	font-size:62.5%;
+}
+table {
+	border-collapse:collapse;
+	border-spacing:0
+}
+fieldset,img {
+	border:0
+}
+address,caption,cite,code,dfn,em,strong,th,var {
+	font-style:normal;
+	font-weight:normal
+}
+ol,ul,li {
+	list-style:none
+}
+caption,th {
+	text-align:left
+}
+h1,h2,h3,h4,h5,h6 {
+	font-size:100%;
+	font-weight:normal
+}
+q:before,q:after {
+	content:''
+}
+abbr,acronym {
+	border:0;
+	font-variant:normal
+}
+sup {
+	vertical-align:text-top
+}
+sub {
+	vertical-align:text-bottom
+}
+input,textarea,select {
+	font-family:inherit;
+	font-size:inherit;
+	font-weight:inherit;
+	*font-size:100%
+}
+legend {
+	color:#000
+}
+.clearfix:before,.clearfix:after {
+	content:"";
+	display:table
+}
+.clearfix:after {
+	clear:both
+}
+.clearfix {
+	*zoom:1
+}
+.text-overflow {
+	overflow:hidden;
+	text-overflow:ellipsis;
+	white-space:nowrap
+}
+.webkit-adjust {
+	-webkit-text-size-adjust:none
+}
+.center {
+	margin:0 auto
+}
+a {
+	text-decoration:none;
+}
+body {
+	font-size:12px;
+	font-family:Microsoft YaHei;
+	min-height:100vh;
+    color:#1d2531;
+}
+input,button,select,textarea{outline:none}
+textarea{resize:none}

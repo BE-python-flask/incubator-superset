@@ -1,0 +1,43 @@
+.recently-compile{
+    .work-title{
+        h2{
+            strong{
+                padding-left:0;
+            }
+        }
+        .record-set{
+            .title-tab{
+                li{
+                    width:66px;
+                    height:32px;
+                }
+            }
+        }
+    }
+    .recently-compile-list{
+        border:$borderStyle;
+        margin-top:13px;
+        background-color:#fff;
+        .worktype-name{
+            ul{
+                li:first-child{
+                    flex:3;
+                    span{
+                        padding-left:38px;
+                    }
+                }
+            }
+        }
+        .work-list-info{
+            ul{
+                li:first-child{
+                    flex:3;
+                    dl{
+                        padding-left:38px;
+                    }
+                }
+            }
+
+        }
+    }
+}
