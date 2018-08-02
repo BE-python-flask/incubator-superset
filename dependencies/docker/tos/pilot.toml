@@ -1,0 +1,10 @@
+[[template]]
+src = "pilot_config.py.tmpl"
+dest = "/etc/pilot/conf/pilot_config.py"
+mode = "0664"
+check_cmd = "/bin/true"
+
+[[template]]
+src = "guardian-site.xml.tmpl"
+dest = "/etc/pilot/conf/guardian-site.xml"
+check_cmd = "/bin/true"

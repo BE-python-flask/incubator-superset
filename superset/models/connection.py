@@ -337,7 +337,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
     @classmethod
     def append_args(cls, connect_args):
         def get_keytab(username, password):
-            dir = config.get('GLOBAL_FOLDER', '/tmp/superset')
+            dir = config.get('GLOBAL_FOLDER', '/tmp/pilot')
             if not os.path.exists(dir):
                 os.makedirs(dir)
             path = os.path.join(dir, '{}.keytab'.format(username))

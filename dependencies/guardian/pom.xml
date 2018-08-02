@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.transwarp</groupId>
+    <artifactId>guardian-client</artifactId>
+    <version>2.0-transwarp-5.2.0</version>
+
+    <dependencies>
+        <!-- guardian client -->
+        <dependency>
+            <groupId>io.transwarp.guardian</groupId>
+            <artifactId>guardian-client</artifactId>
+            <version>2.0-transwarp-5.2.0</version>
+        </dependency>
+        <!-- guardian common: guardian data models etc. -->
+        <dependency>
+            <groupId>io.transwarp.guardian</groupId>
+            <artifactId>guardian-common</artifactId>
+            <version>2.0-transwarp-5.2.0</version>
+        </dependency>
+        <!-- guardian login service for jetty -->
+        <dependency>
+            <groupId>io.transwarp.guardian</groupId>
+            <artifactId>jetty-tools</artifactId>
+            <version>2.0-transwarp-5.2.0</version>
+        </dependency>
+        <!-- guardian utils: kadmin, keytab, keystore tools -->
+        <dependency>
+            <groupId>io.transwarp.guardian</groupId>
+            <artifactId>guardian-utils</artifactId>
+            <version>2.0-transwarp-5.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>2.7.2-transwarp-5.2.0</version>
+        </dependency>
+    </dependencies>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>transwarp-snapshots</id>
+            <url>http://172.16.1.168:8081/artifactory/libs-release-local</url>
+        </snapshotRepository>
+    </distributionManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.1</version>
+                <configuration>
+                    <source>1.7</source>
+                    <target>1.7</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.5</version>
+            </plugin>
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>guardian</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptorRefs>
+                                <descriptorRef>jar-with-dependencies</descriptorRef>
+                            </descriptorRefs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

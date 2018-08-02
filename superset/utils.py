@@ -851,25 +851,6 @@ def user_label(user):
             return user.username
 
 
-def get_or_create_main_db():
-    from superset import conf, db
-    from superset.models import Database
-
-    logging.info('Creating database reference')
-    dbobj = (
-        db.session.query(Database)
-            .filter_by(database_name='main')
-            .first())
-    if not dbobj:
-        dbobj = Database(database_name='main')
-    dbobj.set_sqlalchemy_uri(conf.get('SQLALCHEMY_DATABASE_URI'))
-    dbobj.expose = False
-    dbobj.allow_run_sync = True
-    db.session.add(dbobj)
-    db.session.commit()
-    return dbobj
-
-
 def is_adhoc_metric(metric):
     return (
         isinstance(metric, dict) and

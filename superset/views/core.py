@@ -579,7 +579,9 @@ class Superset(BaseSupersetView, PermissionManagement):
                 utils.error_msg_from_exception(e),
                 stacktrace=traceback.format_exc())
 
-        if not security_manager.datasource_access(viz_obj.datasource, g.user):
+        # if not security_manager.datasource_access(viz_obj.datasource, g.user):
+        if not self.check_read_perm(viz_obj.datasource.guardian_datasource(),
+                                    raise_if_false=False):
             return json_error_response(
                 DATASOURCE_ACCESS_ERR, status=404, link=config.get(
                     'PERMISSION_INSTRUCTIONS_LINK'))
@@ -605,10 +607,8 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_error_response(utils.error_msg_from_exception(e))
 
         status = 200
-        if (
-                        payload.get('status') == QueryStatus.FAILED or
-                        payload.get('error') is not None
-        ):
+        if payload.get('status') == QueryStatus.FAILED\
+                or payload.get('error') is not None:
             status = 400
 
         return json_success(viz_obj.json_dumps(payload), status=status)
@@ -730,27 +730,18 @@ class Superset(BaseSupersetView, PermissionManagement):
         datasource_id, datasource_type = self.datasource_info(
             datasource_id, datasource_type, form_data)
 
-        error_redirect = '/slicemodelview/list/'
+        error_redirect = '/slice/list/'
         datasource = SourceRegistry.get_datasource(
             datasource_type, datasource_id, db.session)
-
-        # TODO
-        # if self.guardian_auth:
-        #     from superset.guardian import guardian_client as client
-        #     if not client.check_global_read(g.user.username):
-        #         readable_names = client.search_model_perms(
-        #             g.user.username, Dataset.guardian_type)
-        #         readable_datasets = [d for d in datasets if d.name in readable_names]
-        #         datasets = readable_datasets
 
         if not datasource:
             flash(DATASOURCE_MISSING_ERR, 'danger')
             return redirect(error_redirect)
 
-        if not security_manager.datasource_access(datasource):
-            flash(
-                __(get_datasource_access_error_msg(datasource.name)),
-                'danger')
+        # if not security_manager.datasource_access(datasource):
+        if not self.check_read_perm(datasource.guardian_datasource(),
+                                    raise_if_false=False):
+            flash(__(get_datasource_access_error_msg(datasource.name)), 'danger')
             return redirect(
                 'superset/request_access/?'
                 'datasource_type={datasource_type}&'
@@ -761,11 +752,17 @@ class Superset(BaseSupersetView, PermissionManagement):
         if not viz_type and datasource.default_endpoint:
             return redirect(datasource.default_endpoint)
 
-        # slc perms
-        slice_add_perm = security_manager.can_access('can_add', 'SliceModelView')
-        slice_overwrite_perm = is_owner(slc, g.user)
-        slice_download_perm = security_manager.can_access(
-            'can_download', 'SliceModelView')
+        # slice_add_perm = security_manager.can_access('can_add', 'SliceModelView')
+        # slice_overwrite_perm = is_owner(slc, g.user)
+        # slice_download_perm = security_manager.can_access(
+        #     'can_download', 'SliceModelView')
+        slice_add_perm = True
+        slice_download_perm = True
+        if not slc:
+            slice_overwrite_perm = True
+        else:
+            slice_overwrite_perm = self.check_edit_perm(slc.guardian_datasource(),
+                                                        raise_if_false=False)
 
         form_data['datasource'] = str(datasource_id) + '__' + datasource_type
 
@@ -845,7 +842,10 @@ class Superset(BaseSupersetView, PermissionManagement):
             datasource_type, datasource_id, db.session)
         if not datasource:
             return json_error_response(DATASOURCE_MISSING_ERR)
-        if not security_manager.datasource_access(datasource):
+
+        # if not security_manager.datasource_access(datasource):
+        if not self.check_read_perm(datasource.guardian_datasource(),
+                                    raise_if_false=False):
             return json_error_response(DATASOURCE_ACCESS_ERR)
 
         payload = json.dumps(
@@ -911,8 +911,9 @@ class Superset(BaseSupersetView, PermissionManagement):
             )
 
             # check edit dashboard permissions
-            # TODO guardian permission
-            dash_overwrite_perm = check_ownership(dash, raise_if_false=False)
+            # dash_overwrite_perm = check_ownership(dash, raise_if_false=False)
+            dash_overwrite_perm = self.check_read_perm(dash.guardian_datasource(),
+                                                       raise_if_false=False)
             if not dash_overwrite_perm:
                 return json_error_response(
                     _('You don\'t have the rights to ') + _('alter this ') +
@@ -926,11 +927,11 @@ class Superset(BaseSupersetView, PermissionManagement):
                 'info')
         elif request.args.get('add_to_dash') == 'new':
             # check create dashboard permissions
-            dash_add_perm = security_manager.can_access('can_add', 'DashboardModelView')
-            if not dash_add_perm:
-                return json_error_response(
-                    _('You don\'t have the rights to ') + _('create a ') + _('dashboard'),
-                    status=400)
+            # dash_add_perm = security_manager.can_access('can_add', 'DashboardModelView')
+            # if not dash_add_perm:
+            #     return json_error_response(
+            #         _('You don\'t have the rights to ') + _('create a ') + _('dashboard'),
+            #         status=400)
 
             dash = Dashboard(
                 name=request.args.get('new_dashboard_name'),
@@ -943,9 +944,9 @@ class Superset(BaseSupersetView, PermissionManagement):
         if dash and slc not in dash.slices:
             dash.slices.append(slc)
             db.session.commit()
-            # Log.log_update(dash, 'dashboard', g.user.id)
-            # dash_view = DashboardModelView()
-            # dash_view._add(dash)
+            Log.log_update(dash, 'dashboard', g.user.id)
+            dash_view = DashboardModelView()
+            dash_view._add(dash)
 
         response = {
             'can_add': slice_add_perm,
@@ -1020,7 +1021,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         db_id = int(db_id)
         database = db.session.query(Database).filter_by(id=db_id).one()
         schemas = database.all_schema_names()
-        schemas = security_manager.schemas_accessible_by_user(database, schemas)
+        # schemas = security_manager.schemas_accessible_by_user(database, schemas)
         return Response(
             json.dumps({'schemas': schemas}),
             mimetype='application/json')
@@ -1033,10 +1034,12 @@ class Superset(BaseSupersetView, PermissionManagement):
         schema = utils.js_string_to_python(schema)
         substr = utils.js_string_to_python(substr)
         database = db.session.query(Database).filter_by(id=db_id).one()
-        table_names = security_manager.accessible_by_user(
-            database, database.all_table_names(schema), schema)
-        view_names = security_manager.accessible_by_user(
-            database, database.all_view_names(schema), schema)
+        # table_names = security_manager.accessible_by_user(
+        #     database, database.all_table_names(schema), schema)
+        # view_names = security_manager.accessible_by_user(
+        #     database, database.all_view_names(schema), schema)
+        table_names = database.all_table_names(schema=schema)
+        view_names = database.all_view_names(schema=schema)
 
         if substr:
             table_names = [tn for tn in table_names if substr in tn]
@@ -1187,9 +1190,8 @@ class Superset(BaseSupersetView, PermissionManagement):
                 logging.info('Superset.testconn(). Masked URL: {0}'.format(masked_url))
 
                 configuration.update(
-                    db_engine.get_configuration_for_impersonation(uri,
-                                                                  impersonate_user,
-                                                                  username),
+                    db_engine.get_configuration_for_impersonation(
+                        uri, impersonate_user, username),
                 )
 
             connect_args = (
@@ -1218,22 +1220,16 @@ class Superset(BaseSupersetView, PermissionManagement):
 
         qry = (
             db.session.query(Log, Dashboard, Slice)
-                .outerjoin(
-                Dashboard,
-                Dashboard.id == Log.dashboard_id,
-                )
-                .outerjoin(
-                Slice,
-                Slice.id == Log.slice_id,
-                )
-                .filter(
+            .outerjoin(Dashboard, Dashboard.id == Log.dashboard_id)
+            .outerjoin(Slice, Slice.id == Log.slice_id)
+            .filter(
                 sqla.and_(
                     ~Log.action.in_(('queries', 'shortner', 'sql_json')),
                     Log.user_id == user_id,
-                    ),
+                ),
             )
-                .order_by(Log.dttm.desc())
-                .limit(limit)
+            .order_by(Log.dttm.desc())
+            .limit(limit)
         )
         payload = []
         for log in qry.all():
@@ -1272,16 +1268,15 @@ class Superset(BaseSupersetView, PermissionManagement):
     def fave_dashboards(self, user_id):
         qry = (
             db.session.query(Dashboard, FavStar.dttm)
-                .join(
+            .join(
                 FavStar,
                 sqla.and_(
                     FavStar.user_id == int(user_id),
                     FavStar.class_name == 'Dashboard',
                     Dashboard.id == FavStar.obj_id,
-                    ),
+                ),
             )
-                .order_by(
-                FavStar.dttm.desc(),
+            .order_by(FavStar.dttm.desc(),
             )
         )
         payload = []
@@ -1307,14 +1302,13 @@ class Superset(BaseSupersetView, PermissionManagement):
         Dash = Dashboard  # noqa
         qry = (
             db.session.query(Dash)
-                .filter(
+            .filter(
                 sqla.or_(
                     Dash.created_by_fk == user_id,
                     Dash.changed_by_fk == user_id,
-                    ),
+                ),
             )
-                .order_by(
-                Dash.changed_on.desc(),
+            .order_by(Dash.changed_on.desc(),
             )
         )
         payload = [{
@@ -1335,23 +1329,23 @@ class Superset(BaseSupersetView, PermissionManagement):
             user_id = g.user.id
         qry = (
             db.session.query(Slice,FavStar.dttm)
-                .join(
+            .join(
                 FavStar,
                 sqla.and_(
                     FavStar.user_id == int(user_id),
                     FavStar.class_name == 'slice',
                     Slice.id == FavStar.obj_id,
-                    ),
+                ),
                 isouter=True
             )
-                .filter(
+            .filter(
                 sqla.or_(
                     Slice.created_by_fk == user_id,
                     Slice.changed_by_fk == user_id,
                     FavStar.user_id == user_id,
-                    ),
+                ),
             )
-                .order_by(Slice.slice_name.asc())
+            .order_by(Slice.slice_name.asc())
         )
         payload = [{
             'id': o.Slice.id,
@@ -1372,13 +1366,13 @@ class Superset(BaseSupersetView, PermissionManagement):
             user_id = g.user.id
         qry = (
             db.session.query(Slice)
-                .filter(
+            .filter(
                 sqla.or_(
                     Slice.created_by_fk == user_id,
                     Slice.changed_by_fk == user_id,
-                    ),
+                ),
             )
-                .order_by(Slice.changed_on.desc())
+            .order_by(Slice.changed_on.desc())
         )
         payload = [{
             'id': o.id,
@@ -1398,16 +1392,15 @@ class Superset(BaseSupersetView, PermissionManagement):
             user_id = g.user.id
         qry = (
             db.session.query(Slice, FavStar.dttm)
-                .join(
+            .join(
                 FavStar,
                 sqla.and_(
                     FavStar.user_id == int(user_id),
                     FavStar.class_name == 'slice',
                     Slice.id == FavStar.obj_id,
-                    ),
+                ),
             )
-                .order_by(
-                FavStar.dttm.desc(),
+            .order_by(FavStar.dttm.desc(),
             )
         )
         payload = []
@@ -1453,10 +1446,11 @@ class Superset(BaseSupersetView, PermissionManagement):
             SqlaTable = SourceRegistry.sources['table']
             table = (
                 session.query(SqlaTable)
-                    .join(Database)
-                    .filter(
+                .join(Database)
+                .filter(
                     Database.database_name == db_name or
-                    SqlaTable.table_name == table_name)
+                    SqlaTable.table_name == table_name
+                )
             ).first()
             if not table:
                 return json_error_response(__(
@@ -1490,8 +1484,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         # get obj name to make log readable
         obj = (
             session.query(str_to_model[class_name.lower()])
-                .filter_by(id=obj_id)
-                .one()
+                .filter_by(id=obj_id).one()
         )
 
         if action == 'select':
@@ -1542,29 +1535,28 @@ class Superset(BaseSupersetView, PermissionManagement):
             if datasource:
                 datasources.add(datasource)
 
-        if config.get('ENABLE_ACCESS_REQUEST'):
-            for datasource in datasources:
-                if datasource and not security_manager.datasource_access(datasource):
-                    flash(
-                        __(get_datasource_access_error_msg(datasource.name)),
-                        'danger')
-                    return redirect(
-                        'superset/request_access/?'
-                        'dashboard_id={dash.id}&'.format(**locals()))
+        # if config.get('ENABLE_ACCESS_REQUEST'):
+        #     for datasource in datasources:
+        #         if datasource and not security_manager.datasource_access(datasource):
+        #             flash(
+        #                 __(get_datasource_access_error_msg(datasource.name)),
+        #                 'danger')
+        #             return redirect(
+        #                 'superset/request_access/?'
+        #                 'dashboard_id={dash.id}&'.format(**locals()))
 
         # Hack to log the dashboard_id properly, even when getting a slug
         def dashboard(**kwargs):  # noqa
             pass
         dashboard(dashboard_id=dash.id)
-        # TODO
-        # dash_edit_perm = self.check_edit_perm(dash.guardian_datasource(),
-        #                                       raise_if_false=False)
+
         # dash_edit_perm = check_ownership(dash, raise_if_false=False) and \
         #                  security_manager.can_access('can_save_dash', 'Superset')
         # dash_save_perm = security_manager.can_access('can_save_dash', 'Superset')
         # superset_can_explore = security_manager.can_access('can_explore', 'Superset')
         # slice_can_edit = security_manager.can_access('can_edit', 'SliceModelView')
-        dash_edit_perm = True
+        dash_edit_perm = self.check_edit_perm(
+            dash.guardian_datasource(), raise_if_false=False)
         dash_save_perm = True
         superset_can_explore = True
         slice_can_edit = True
@@ -1850,8 +1842,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         client_id = request.form.get('client_id')
         try:
             query = (
-                db.session.query(Query)
-                    .filter_by(client_id=client_id).one()
+                db.session.query(Query).filter_by(client_id=client_id).one()
             )
             query.status = utils.QueryStatus.STOPPED
             db.session.commit()
@@ -1877,10 +1868,10 @@ class Superset(BaseSupersetView, PermissionManagement):
             json_error_response(
                 'Database with id {} is missing.'.format(database_id))
 
-        rejected_tables = security_manager.rejected_datasources(sql, mydb, schema)
-        if rejected_tables:
-            return json_error_response(get_datasource_access_error_msg(
-                '{}'.format(rejected_tables)))
+        # rejected_tables = security_manager.rejected_datasources(sql, mydb, schema)
+        # if rejected_tables:
+        #     return json_error_response(get_datasource_access_error_msg(
+        #         '{}'.format(rejected_tables)))
         session.commit()
 
         select_as_cta = request.form.get('select_as_cta') == 'true'

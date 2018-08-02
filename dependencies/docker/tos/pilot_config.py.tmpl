@@ -1,0 +1,35 @@
+PILOT_WORKERS = {{ getenv "PILOT_WORKERS" "4"}}
+PILOT_WEBSERVER_PORT = {{ getenv "PILOT_WEBSERVER_PORT" "8086"}}
+
+
+SQLALCHEMY_DATABASE_URI = "{{ getenv "PILOT_SQLALCHEMY_DATABASE_URI" "mysql://root:123456@localhost:3306/pilot?charset=utf8"}}"
+
+
+CAS_AUTH = {{ getenv "PILOT_CAS_AUTH" "False"}}
+CAS_SERVER = "{{ getenv "PILOT_CAS_SERVER" "https://localhost:8393"}}"
+CAS_URL_PREFIX = "{{ getenv "PILOT_CAS_URL_PREFIX" "/cas"}}"
+
+
+GUARDIAN_AUTH = {{ getenv "PILOT_GUARDIAN_AUTH" "False"}}
+GUARDIAN_SERVER = "{{ getenv "PILOT_GUARDIAN_SERVER" "https://localhost:8380"}}"
+
+
+STUDIO_ADMIN_ROLE_NAME = '{{ getenv "STUDIO_ADMIN_ROLE_NAME" ""}}'
+STUDIO_DEVELOPER_ROLE_NAME = '{{ getenv "STUDIO_DEVELOPER_ROLE_NAME" ""}}'
+STUDIO_VIEWER_ROLE_NAME = '{{ getenv "STUDIO_DEVELOPER_ROLE_NAME" ""}}'
+
+
+DEFAULT_INCEPTOR_SERVER = "{{ getenv "PILOT_INCEPTOR_SERVER" "node01:10000" }}"
+
+
+LICENSE_CHECK = {{ getenv "PILOT_LICENSE_CHECK" "False"}}
+LICENSE_CHECK_SERVER = "{{ getenv "PILOT_LICENSE_CHECK_SERVER" "localhost:2291"}}"
+
+
+FILE_ROBOT_SERVER = "{{ getenv "PILOT_FILEROBOT_SERVER" "localhost:5005"}}"
+
+
+DEFAULT_HTTPFS = "{{ getenv "PILOT_DEFAULT_HTTPFS" "localhost"}}"
+
+
+LOAD_EXAMPLES = {{ getenv "PILOT_LOAD_EXAMPLES" "True"}}

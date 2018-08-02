@@ -10,7 +10,7 @@ from sqlalchemy_utils.functions import database_exists, create_database
 from flask import g, Flask, redirect
 from flask_appbuilder import SQLA, AppBuilder, IndexView
 from flask_appbuilder.baseviews import expose
-from flask_cache import Cache
+from flask_caching import Cache
 from flask_migrate import Migrate
 from flask_compress import Compress
 from superset.cas import CAS, login_required
