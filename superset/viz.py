@@ -284,6 +284,7 @@ class BaseViz(object):
         self.to_dttm = to_dttm
 
         filters = form_data.get('filters', [])
+        filters = [f for f in filters if f is not None]
 
         extras = {
             'where': form_data.get('where', ''),

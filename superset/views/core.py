@@ -747,25 +747,33 @@ class Superset(BaseSupersetView, PermissionManagement):
             flash(DATASOURCE_MISSING_ERR, 'danger')
             return redirect(error_redirect)
 
-        if not security_manager.datasource_access(datasource):
-            flash(
-                __(get_datasource_access_error_msg(datasource.name)),
-                'danger')
-            return redirect(
-                'superset/request_access/?'
-                'datasource_type={datasource_type}&'
-                'datasource_id={datasource_id}&'
-                ''.format(**locals()))
+        # if not security_manager.datasource_access(datasource):
+        #     flash(
+        #         __(get_datasource_access_error_msg(datasource.name)),
+        #         'danger')
+        #     return redirect(
+        #         'superset/request_access/?'
+        #         'datasource_type={datasource_type}&'
+        #         'datasource_id={datasource_id}&'
+        #         ''.format(**locals()))
 
         viz_type = form_data.get('viz_type')
         if not viz_type and datasource.default_endpoint:
             return redirect(datasource.default_endpoint)
 
-        # slc perms
-        slice_add_perm = security_manager.can_access('can_add', 'SliceModelView')
-        slice_overwrite_perm = is_owner(slc, g.user)
-        slice_download_perm = security_manager.can_access(
-            'can_download', 'SliceModelView')
+        # TODO slc perms
+        # slice_add_perm = security_manager.can_access('can_add', 'SliceModelView')
+        # slice_overwrite_perm = is_owner(slc, g.user)
+        # slice_download_perm = security_manager.can_access(
+        #     'can_download', 'SliceModelView')
+        slice_add_perm = True
+        slice_overwrite_perm = True
+        slice_download_perm = True
+        # if not slc:
+        #     slice_overwrite_perm = True
+        # else:
+        #     slice_overwrite_perm = self.check_edit_perm(slc.guardian_datasource(),
+        #                                            raise_if_false=False)
 
         form_data['datasource'] = str(datasource_id) + '__' + datasource_type
 
@@ -926,11 +934,11 @@ class Superset(BaseSupersetView, PermissionManagement):
                 'info')
         elif request.args.get('add_to_dash') == 'new':
             # check create dashboard permissions
-            dash_add_perm = security_manager.can_access('can_add', 'DashboardModelView')
-            if not dash_add_perm:
-                return json_error_response(
-                    _('You don\'t have the rights to ') + _('create a ') + _('dashboard'),
-                    status=400)
+            # dash_add_perm = security_manager.can_access('can_add', 'DashboardModelView')
+            # if not dash_add_perm:
+            #     return json_error_response(
+            #         _('You don\'t have the rights to ') + _('create a ') + _('dashboard'),
+            #         status=400)
 
             dash = Dashboard(
                 name=request.args.get('new_dashboard_name'),
