@@ -200,7 +200,7 @@ CSV_EXPORT = {
 # For example: Blacklist pivot table and treemap:
 #  VIZ_TYPE_BLACKLIST = ['pivot_table', 'treemap']
 # ---------------------------------------------------
-VIZ_TYPE_BLACKLIST = ['mapbox']
+VIZ_TYPE_BLACKLIST = []
 
 
 # --------------------------------------------------
