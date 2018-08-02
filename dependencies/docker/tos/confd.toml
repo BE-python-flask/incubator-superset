@@ -1,0 +1,3 @@
+backend = "env"
+log-level = "debug"
+principal = "hive/tos@TDH"

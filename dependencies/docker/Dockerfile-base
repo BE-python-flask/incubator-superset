@@ -1,0 +1,42 @@
+# FROM 172.16.1.99/transwarp/tdh-baseimage:transwarp-5.1
+FROM 172.16.1.99/gold/guardian-plugins:transwarp-6.0
+
+RUN yum install -y gcc-c++ libaio cyrus-sasl mariadb-devel unixODBC-devel \
+        krb5-devel cyrus-sasl-plain cyrus-sasl-gssapi freetds-devel && \
+    ln -s /usr/lib64/libsasl2.so.3.0.0 /usr/lib64/libsasl2.so.2 && \
+    yum clean all && \
+    rm -Rf /var/cache/yum && \
+    pip3.5 install --no-cache-dir --upgrade setuptools pip \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+
+# oracle
+COPY oracle/* /tmp/
+RUN rpm -ivh /tmp/oracle-instantclient11.2-basic-* && \
+    rpm -ivh /tmp/oracle-instantclient11.2-devel-* && \
+    # ln -s /usr/lib/oracle/11.2/client64/lib/libclntsh.so.11.1 /usr/lib/oracle/11.2/client64/lib/libclntsh.so && \
+    rm -Rf /tmp/*
+
+ENV ORACLE_HOME=/usr/lib/oracle/11.2/client64
+ENV PATH=$ORACLE_HOME/bin:$PATH \
+    LD_LIBRARY_PATH=$ORACLE_HOME/lib:$LA_LIBRARY_PATH
+
+
+# inceptor odbc
+COPY ./inceptor-odbc/ /tmp/inceptor-odbc/
+RUN find /tmp/inceptor-odbc -maxdepth 2 -type f -iname "inceptor-connector-odbc*" -exec rpm -ivh {} --nodeps \; && \
+    cp /usr/local/inceptor/* /etc/ && \
+    rm -rf /tmp/*
+
+# python packages
+# -i http://pypi.douban.com/simple --trusted-host pypi.douban.com
+# -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt -i http://pypi.douban.com/simple --trusted-host pypi.douban.com && \
+    pip uninstall -y sqlalchemy flask-appbuilder
+
+# update confd
+RUN wget ftp://172.16.1.32/pub/tos/build/confd_modified -O /usr/bin/confd && \
+    chmod +x /usr/bin/confd
+
+CMD ["/bin/bash"]
