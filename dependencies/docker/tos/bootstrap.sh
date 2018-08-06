@@ -21,6 +21,6 @@ fi
 
 confd -onetime
 
-pilot db upgrade
-pilot init
-pilot runserver
+superset db upgrade
+superset init
+superset runserver
