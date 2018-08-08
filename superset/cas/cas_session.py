@@ -23,7 +23,7 @@ class CheckTicketMinix(object):
         return True if ticket.startswith('PGTIOU-') else False
 
 
-class BaseStore(object):
+class BaseStore(object):  # Deprcated
 
     def get(self, key):
         data = self.get_data_dict()
@@ -52,7 +52,7 @@ class BaseStore(object):
         pass
 
 
-class FileStore(BaseStore):
+class FileStore(BaseStore):  # Deprcated
     """Use file to store a dict
 
     """
@@ -94,7 +94,7 @@ class FileStore(BaseStore):
         return os.path.join(self.path, self.filename)
 
 
-class EnvVariableStore(BaseStore):
+class EnvVariableStore(BaseStore):  # Deprcated
     """Use System environment variable to store data
 
     Deprecated: os.environ can't be shared between process.
@@ -110,19 +110,19 @@ class EnvVariableStore(BaseStore):
         os.environ[self.env_key] = json.dumps(data)
 
 
-class ProxyGrantTicketStore(FileStore, CheckTicketMinix):
-    """Store proxy grant ticket in EnvVariableStore
+class ProxyGrantTicketFileStore(FileStore, CheckTicketMinix):  # Deprcated
+    """Store proxy grant ticket in File
 
     key: pgtiou
     value: pgt
     """
     def __init__(self):
-        super(ProxyGrantTicketStore, self).__init__()
+        super(ProxyGrantTicketFileStore, self).__init__()
         self.filename = 'proxy_grant_ticket.store'
 
     def get(self, key):
         if self.is_key(key):
-            return super(ProxyGrantTicketStore, self).get(key)
+            return super(ProxyGrantTicketFileStore, self).get(key)
         else:
             return self.get_by_value(key)
 
@@ -136,7 +136,7 @@ class ProxyGrantTicketStore(FileStore, CheckTicketMinix):
     def remove(self, key):
         if not self.is_key(key):
             key = self.get_by_value(key)
-        return super(ProxyGrantTicketStore, self).remove(key)
+        return super(ProxyGrantTicketFileStore, self).remove(key)
 
     def is_key(self, key):
         return self.is_proxy_grant_ticket_iou(key)
@@ -150,8 +150,8 @@ class ProxyGrantTicketStore(FileStore, CheckTicketMinix):
             raise Exception
 
 
-class ServiceTicketStore(FileStore, CheckTicketMinix):
-    """Store service ticket in EnvVariableStore
+class ServiceTicketFileStore(FileStore, CheckTicketMinix):  # Deprcated
+    """Store service ticket in file
 
     key: service ticket
     value: username
@@ -160,7 +160,7 @@ class ServiceTicketStore(FileStore, CheckTicketMinix):
     VERIFIED_MARK = '_VERIFIED_'
 
     def __init__(self):
-        super(ServiceTicketStore, self).__init__()
+        super(ServiceTicketFileStore, self).__init__()
         self.filename = 'service_ticket.store'
 
     def set(self, key, value, clear_logout=False):
@@ -201,12 +201,164 @@ class ServiceTicketStore(FileStore, CheckTicketMinix):
         return True if value is None or value.startswith(self.VERIFIED_MARK) else False
 
 
+class DatabaseStore(object):
+    table = 'cas'
+
+    def __init__(self):
+        self.type = 'none'
+
+    def get(self, key):
+        from superset import db
+        sql = "select v from {table} where type='{type}' and k='{key}'" \
+            .format(table=self.table, type=self.type, key=key)
+        rs = db.session.execute(sql)
+        row = rs.first()
+        if row is None:
+            logging.error("[CAS] not get value by key [{}...]".format(key[:20]))
+            return None
+        else:
+            return row[0]
+
+    def set(self, key, value, clear_logout=False):
+        from superset import db
+        session = db.session
+
+        sql = "select id, type, k, v from {table} where type='{type}' and k='{key}'" \
+            .format(table=self.table, type=self.type, key=key)
+        rs = session.execute(sql)
+        row = rs.first()
+
+        if row is not None:
+            sql = "update {table} set v='{value}' where id={id}" \
+                .format(table=self.table, value=value, id=row[0])
+        else:
+            sql = "insert into {table}(type, k, v) values('{type}', '{key}', '{value}')" \
+                .format(table=self.table, type=self.type, key=key, value=value)
+        session.execute(sql)
+        session.commit()
+
+    def remove(self, key):
+        from superset import db
+        session = db.session
+        sql = "delete from {table} where type='{type}' and k='{key}'" \
+            .format(table=self.table, type=self.type, key=key)
+        session.execute(sql)
+        session.commit()
+
+    def check_key(self, key):
+        pass
+
+    def check_value(self, value):
+        pass
+
+
+class ProxyGrantTicketDbStore(DatabaseStore, CheckTicketMinix):
+    """Store proxy grant ticket in EnvVariableStore
+
+    key: pgtiou
+    value: pgt
+    """
+
+    def __init__(self):
+        super(ProxyGrantTicketDbStore, self).__init__()
+        self.type = 'pgt'
+
+    def get(self, key):
+        if self.is_key(key):
+            return super(ProxyGrantTicketDbStore, self).get(key)
+        else:
+            return self.get_by_value(key)
+
+    def get_by_value(self, value):
+        from superset import db
+        sql = "select k from {table} where type='{type}' and v='{value}'" \
+            .format(table=self.table, type=self.type, value=value)
+        rs = db.session.execute(sql)
+        row = rs.first()
+        if row is None:
+            logging.error("[CAS] not get pgtiou by pgt [{}...]".format(value[:20]))
+            return None
+        else:
+            return row[0]
+
+    def remove(self, key):
+        if self.is_key(key):
+            super(ProxyGrantTicketDbStore, self).remove(key)
+        else:
+            self.remove_by_value(key)
+
+    def remove_by_value(self, value):
+        from superset import db
+        session = db.session
+        sql = "delete from {table} where type='{type}' and v='{value}'" \
+            .format(table=self.table, type=self.type, value=value)
+        session.execute(sql)
+        session.commit()
+
+    def is_key(self, key):
+        return self.is_proxy_grant_ticket_iou(key)
+
+    def check_key(self, key):
+        if not self.is_proxy_grant_ticket_iou(key):
+            raise Exception
+
+    def check_value(self, value):
+        if not self.is_proxy_grant_ticket(value):
+            raise Exception
+
+
+class ServiceTicketDbStore(DatabaseStore, CheckTicketMinix):
+    """Store service ticket in EnvVariableStore
+
+    key: service ticket
+    value: username
+    """
+    LOGOUT_MARK = '_LOGOUT_'
+    VERIFIED_MARK = '_VERIFIED_'
+
+    def __init__(self):
+        super(ServiceTicketDbStore, self).__init__()
+        self.type = 'st'
+
+    def set(self, key, value, clear_logout=False):
+        if clear_logout:
+            from superset import db
+            sql = "delete from {table} where v like '%{mark}'" \
+                .format(table=self.table, mark=self.LOGOUT_MARK)
+            db.session.execute(sql)
+        super(ServiceTicketDbStore, self).set(key, value, clear_logout)
+
+    def check_key(self, key):
+        if not self.is_service_ticket(key):
+            raise Exception()
+
+    def logout(self, key):
+        self.check_key(key)
+        value = self.get(key)
+        value = '{}{}'.format(value, self.LOGOUT_MARK)
+        self.set(key, value)
+
+    def is_logout(self, key):
+        value = self.get(key)
+        return True if value is None or value.endswith(self.LOGOUT_MARK) else False
+
+    def verify(self, key):
+        self.check_key(key)
+        value = self.get(key)
+        value = '{}{}'.format(self.VERIFIED_MARK, value)
+        self.set(key, value)
+
+    def is_verified(self, key):
+        value = self.get(key)
+        return True if value is None or value.startswith(self.VERIFIED_MARK) else False
+
+
 class CASSessionStore(CheckTicketMinix):
     """
     """
     def __init__(self):
-        self.st_store = ServiceTicketStore()
-        self.pgt_store = ProxyGrantTicketStore()
+        self.st_store = ServiceTicketDbStore()
+        self.pgt_store = ProxyGrantTicketDbStore()
 
     def get(self, key):
         logging.debug('[CAS] CASClientSession gets [{}...]'.format(key[:20]))

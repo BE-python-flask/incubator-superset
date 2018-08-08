@@ -16,7 +16,7 @@ from superset import db
 
 # revision identifiers, used by Alembic.
 revision = '3_0_0'
-down_revision = '2_0_0'
+down_revision = '2_0_1'
 
 
 Base = declarative_base()
