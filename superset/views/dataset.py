@@ -603,7 +603,7 @@ class DatasetModelView(UnionModelView, PermissionManagement):  # noqa
         self.model.check_name(obj.dataset_name)
         if not obj.database_id:
             raise ParameterException(NONE_CONNECTION)
-        if not obj.schema and not obj.table_namej and not obj.sql:
+        if not obj.schema and not obj.table_name and not obj.sql:
             raise ParameterException(NONE_CONNECTION)
 
 
