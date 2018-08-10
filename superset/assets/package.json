@@ -8,6 +8,7 @@
     "test": "spec"
   },
   "scripts": {
+    "publish": "node --max_old_space_size=6144 ./node_modules/webpack/bin/webpack.js -p --config webpack.prod.js --color --progress",
     "rock": "node --max_old_space_size=4096 ./node_modules/webpack/bin/webpack.js --config webpack.dev.js --output-pathinfo --watch --colors --progress",
     "test": "mocha --require ignore-styles --compilers js:babel-core/register --require spec/helpers/browser.js 'spec/**/*_spec.*'",
     "cover": "babel-node node_modules/.bin/babel-istanbul cover _mocha -- --require ignore-styles spec/helpers/browser.js 'spec/**/*_spec.*'",
@@ -192,6 +193,7 @@
     "transform-loader": "^0.2.3",
     "url-loader": "^0.6.2",
     "webpack": "^4.8.3",
+    "webpack-assets-manifest": "^3.0.1",
     "webpack-cli": "^2.1.4",
     "webpack-manifest-plugin": "^2.0.3",
     "webpack-merge": "^4.1.2",

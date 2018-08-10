@@ -44,9 +44,10 @@ conf = app.config
 MANIFEST_FILE = APP_DIR + '/static/assets/dist/manifest.json'
 FEATURE_GOGGLES = APP_DIR + '/static/assets/featureToggles.json'
 manifest = {}
+js_manifest = {}
 
 def parse_manifest_json():
-    global manifest
+    global manifest, js_manifest
     try:
         with open(MANIFEST_FILE, 'r') as f:
             manifest = json.load(f)
@@ -64,6 +65,7 @@ def parse_feature_toggles():
 def get_manifest_file(filename):
     if app.debug:
         parse_manifest_json()
+    m = manifest
     return '/static/assets/dist/' + manifest.get(filename, '')
 
 
@@ -73,6 +75,7 @@ parse_feature_toggles()
 @app.context_processor
 def get_js_manifest():
     return dict(js_manifest=get_manifest_file)
+
 @app.context_processor
 def get_feature_toggles():
     t = json.dumps(toggles)

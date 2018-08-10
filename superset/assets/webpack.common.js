@@ -4,6 +4,8 @@ const webpack = require('webpack');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
 const ManifestPlugin = require('webpack-manifest-plugin');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const WebpackAssetsManifest = require('webpack-assets-manifest');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 const APP_DIR = path.resolve(__dirname, './'); // input dir
 const BUILD_DIR = path.resolve(__dirname, './dist'); // output dir
@@ -14,7 +16,7 @@ module.exports = {
     fs: 'empty',
   },
   entry: {
-    home: APP_DIR + '/src/home.jsx',
+     home: APP_DIR + '/src/home.jsx',
     theme: APP_DIR + '/src/theme.js',
     common: APP_DIR + '/src/common.js',
     addSlice: APP_DIR + '/src/addSlice/index.jsx',
@@ -29,7 +31,7 @@ module.exports = {
     path: BUILD_DIR,
     // filename: `[name].${VERSION_STRING}.entry.js`,
     filename: '[name].[chunkhash].entry.js',
-    chunkFilename: '[name].[chunkhash].entry.js'
+    chunkFilename: '[name].[chunkhash].chunk.js'
   },
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.css', '.sass', '.scss', '.less'],
@@ -40,7 +42,9 @@ module.exports = {
     // }
   },
   module: {
-    noParse: /mapbox-gl\/dist/,
+    // noParse: /mapbox-gl\/dist/,
+    noParse: /(mapbox-gl)\.js$/,
+
     rules: [{
         test: /datatables\.net.*/,
         use: 'imports-loader?define=>false',
@@ -127,13 +131,26 @@ module.exports = {
     xmlhttprequest: '{XMLHttpRequest:XMLHttpRequest}'
   },
   plugins: [
-    new ManifestPlugin(),
+    // new ManifestPlugin(),
+    new WebpackAssetsManifest({
+      publicPath: true,
+      entrypoints: true, // this enables us to include all relevant files for an entry
+    }),
     new CleanWebpackPlugin(['dist/']),
-    new webpack.DefinePlugin({
+
+    /* new webpack.DefinePlugin({
       'process.env': {
         NODE_ENV: JSON.stringify(process.env.NODE_ENV),
       }
-    }),
-    new ExtractTextPlugin('[name].[chunkhash].css')
+    }), */
+
+    // new ExtractTextPlugin({
+    //   filename: '[name].[chunkhash].entry.css',
+    //   chunkFilename: '[name].[chunkhash].entry.css',
+    // })
+    new MiniCssExtractPlugin({
+      filename: '[name].[chunkhash].entry.css',
+      chunkFilename: '[name].[chunkhash].chunk.css',
+    })
   ]
 };
