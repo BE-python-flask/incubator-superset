@@ -1,0 +1,359 @@
+*{margin:0;padding:0;border:0;}
+/*body{height:100vh;}*/
+ul,li{
+    list-style: none;
+}
+a{text-decoration:none;}
+
+
+
+
+/*.icon{
+    display:inline-block;
+    background-image:url(../../../images/icon-img/icon.png);
+}*/
+
+.data-detail{
+    box-sizing: border-box;
+    padding:0 50px 50px 50px;
+    background-color:#edf0f5;
+
+}
+.data-detail>.title{
+    color:#1d2531;
+    font:18px/52px Miscrosoft YaHei;
+    display: flex;
+    align-items: center;
+}
+.data-detail>.title>.icon{
+    width:15px;
+    height:15px;
+    background-position:-171px -172px;
+    margin-right:6px;
+}
+.data-detail-wrap{
+    border-radius: 4px;
+    background-color:#fff;
+}
+.data-detail-wrap>.data-wrap-center{
+    margin:0 auto;
+}
+.detail-nav{
+    border-bottom:1px solid #dfe3e9;
+}
+.detail-nav>ul{
+    display:flex;
+    justify-content: center;
+}
+.detail-nav li{
+    padding:0 25px;
+}
+.detail-nav li a{
+    display:block;
+    padding:0 10px;
+    font:16px/66px Miscrosoft YaHei;
+    color:#7c8ca5;
+    border-bottom:2px solid #fff;
+}
+.detail-nav li .active,.detail-nav li a:hover{
+    border-bottom:2px solid #0089f7;
+    color:#1d2531;
+    text-decoration:none;
+}
+.data-detail-centent{
+    padding:0 0 24px 24px;
+    background-color: #fff;
+}
+.data-detail-item{
+    margin-top:20px;
+    align-items: center;
+    display:flex;
+    justify-content: flex-start;
+}
+
+/*.data-detail-centent.shallow input{
+    width:200px;
+}*/
+.data-detail-checkbox{
+    display: flex;
+    align-items: center;
+}
+.data-detail-checkbox>p{
+    font-size:12px;
+    color:#1d2531;
+    padding-left:10px;
+}
+.data-detail-item>.infor-icon{
+    width:16px;
+    height:16px;
+    background-position:-290px -251px;
+    margin-left:5px;
+}
+.data-detail-item>div:first-child, .data-detail-item>span{
+    color:#7c8ca5;
+    font-size:12px;
+    display:block;
+    width:200px;
+    text-align:right;
+    margin-right:10px;
+}
+.data-detail-item>div:first-child i{
+    color: #ff1111;
+    font-size: 16px;
+    font-weight: bold;
+    margin-right: 5px;
+    position: relative;
+    top: 3px;
+}
+.data-detail-item>input{
+    width:312px;
+    height:34px;
+    border-radius: 4px;
+    border:1px solid #dfe3e9;
+    padding-left:10px;
+    box-sizing: border-box;
+}
+.data-detail-item>textarea{
+    width:782px;
+    height:89px;
+    border-radius: 4px;
+    border:1px solid #dfe3e9;
+    box-sizing: border-box;
+    padding:10px;
+    resize: none;
+}
+.data-detail-wrap-item{
+    display:flex;
+}
+.sub-btn{
+    display: flex;
+    justify-content: center;
+    padding:24px 0;
+}
+.sub-btn>input, .sub-btn>button{
+    width:160px;
+    height:40px;
+    background-color:#2acc28;
+    border-radius: 4px;
+    color:#fff;
+    text-align:center;
+    font:16px/40px Miscrosoft YaHei;
+    cursor: pointer;
+}
+.radio-glugin{
+    width:14px;
+    border:1px solid #cfd1db;
+    border-radius: 50%;
+    height:14px;
+    background-color:#fcfcfd;
+    cursor: pointer;
+}
+.radio-glugin-active{
+    border:1px solid #2acc28;
+    position: relative;
+}
+.radio-glugin-active:after{
+    content:"";
+    display: block;
+    border-radius:50%;
+    width:100%;
+    height:100%;
+    background-color:#2acc28;
+}
+.radio-glugin-active:before{
+    position: absolute;
+    content:"";
+    width:6px;
+    height:6px;
+    background-color:#fff;
+    border-radius: 50%;
+    top:50%;
+    left:50%;
+    margin-top:-3px;
+    margin-left:-3px;
+}
+.data-detail-item>dl{
+    display: flex;
+    align-items: center;
+    padding-right:38px;
+}
+.data-detail-item dd{
+    margin-left:10px;
+    color:#7f8fa4;
+    font-size:12px;
+}
+.data-detail-item>dl>.active{
+    color:#1d2531;
+}
+.file-show{
+    height:204px;
+    width:780px;
+    border:1px solid #d9dfe7;
+    border-radius: 4px;
+    padding:10px;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.file-fold>.icon{
+    width:12px;
+    height:10px;
+    background-position: -213px -375px;
+    cursor: pointer;
+}
+
+.file-fold>span{
+    padding-left:5px;
+    color:#7c8ca5;
+    font-size:12px;
+    cursor: pointer;
+}
+.file-fold>.active{
+    color:#279cf2;
+}
+.file-fold-active>.icon{
+    width:14px;
+    height:9px;
+    background-position:-253px -376px;
+    cursor: pointer;
+}
+.file-fold-active>span{
+    color:#279cf2;
+    font-size:12px;
+    padding-left:5px;
+    cursor: pointer;
+}
+
+.file-fold-active>.file-fold-active,.file-fold-active>.file-fold{
+    margin-left:18px;
+}
+.uploading-btn{
+    width:100px;
+    height:36px;
+    color:#fff;
+    background-color:#279cf2;
+    font:14px/36px Miscrosoft YaHei;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.file-uploading{
+    display: flex;
+    align-items: center;
+}
+.file-uploading>.icon{
+    width:15px;
+    height:17px;
+    background-position: -92px -251px;
+}
+.file-uploaded>span,.file-uploading>span{
+    color:#f9be00;
+    font-size:12px;
+    padding:0 20px 0 6px;
+}
+.file-uploaded>.finish,.progress{
+    width:111px;
+    height:4px;
+    background-color:#e2e7ee;
+    border-radius: 4px;
+    position:relative;
+    overflow: hidden;
+}
+.progress:after{
+    content:"";
+    position:absolute;
+    top:0;
+    left:0;
+    width:50%;
+    height:100%;
+    background-color:#f9be00;
+}
+.file-uploaded>.icon{
+    width:15px;
+    height:17px;
+    background-position: -133px -171px;
+}
+.file-uploaded{
+    display: flex;
+    align-items: center;
+}
+.file-uploaded>span{
+    color:#7f8fa4;
+}
+.connect-success>span{
+    font-size:12px;
+    color:#7c8ca5;
+}
+.connect-success>button{
+    width:84px;
+    height:30px;
+    background-color:#2acc28;
+    border-radius: 4px;
+    text-align: center;
+    font:14px/30px Miscrosoft YaHei;
+    color:#fff;
+}
+.data-connect-status{
+    width:782px;
+    height:120px;
+    background-color:#f3f6fa;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items:center;
+}
+.data-connect-status>span{
+    font-size:14px;
+    color:#7c8ca5;
+}
+.data-connect-status>button, .sub-btn>a{
+    width:160px;
+    height:40px;
+    text-align: center;
+    font:14px/40px Miscrosoft YaHei;
+    color:#fff;
+    border-radius: 4px;
+    background-color:#2acc28;
+    margin-left: 25px;
+    cursor: pointer;
+}
+.data-detail-border{
+    border-bottom:1px solid #dfe3e9;
+    padding-bottom:25px;
+}
+.data-detail-centent,.new-data-gather,.ununited-data,.data-detail-preview{
+    padding:20px 0;
+    background-color: #fff;
+}
+.data-detail-item-time>input{
+    width:200px;
+}
+.data-detail-item>a{
+    position: relative;
+    left: -155px;
+    top: -20px;
+}
+.alert-tip {
+    display: flex;
+    justify-content: center;
+}
+.none{
+    display: none;
+}
+.btn-blue{
+    padding:0 12px;
+    height: 36px;
+    color: #fff;
+    background-color: #279cf2;
+    font: 14px/36px Miscrosoft YaHei;
+    border-radius: 4px;
+    cursor: pointer;
+
+}
+.tab-btn-ps{
+    position:relative;
+    right:78px
+}
+
+.data-preview .ant-table-body > table {
+    padding: 0;
+}

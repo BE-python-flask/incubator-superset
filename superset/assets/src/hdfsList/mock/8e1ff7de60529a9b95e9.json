@@ -1,0 +1,59 @@
+{
+    "sortby": null,
+    "pagesize": 30,
+    "files": [
+        {
+            "stats": {
+                "replication": 0,
+                "group": "hadoop",
+                "blockSize": 0,
+                "path": "/tmp/pilot/..",
+                "mode": 17407,
+                "user": "hdfs",
+                "size": 0,
+                "mtime": 1500883524.353,
+                "atime": 0
+            },
+            "path": "/tmp",
+            "mode": 17407,
+            "type": "dir",
+            "size": 0,
+            "mtime": "July 24, 2017 12:00 AM",
+            "name": "..",
+            "url": "http://172.16.3.108:5000/filebrowser?action=list&path=/tmp",
+            "rwx": "drwxrwxrwxt"
+        },
+        {
+            "stats": {
+                "replication": 0,
+                "group": "hadoop",
+                "blockSize": 0,
+                "path": "/tmp/pilot",
+                "mode": 16877,
+                "user": "admin",
+                "size": 0,
+                "mtime": 1500883524.353,
+                "atime": 0
+            },
+            "path": "/tmp/pilot",
+            "mode": 16877,
+            "type": "dir",
+            "size": 0,
+            "mtime": "July 24, 2017 12:00 AM",
+            "name": ".",
+            "url": "http://172.16.3.108:5000/filebrowser?action=list&path=/tmp/pilot",
+            "rwx": "drwxr-xr-x"
+        }
+    ],
+    "page": {
+        "number": 1,
+        "num_pages": 1,
+        "end_index": 0,
+        "previous_page_number": 1,
+        "total_count": 0,
+        "next_page_number": 1,
+        "start_index": 0
+    },
+    "descending": null,
+    "path": "/tmp/pilot"
+}

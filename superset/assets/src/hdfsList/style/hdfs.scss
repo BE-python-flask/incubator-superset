@@ -1,0 +1,94 @@
+
+.left{
+    i, span{
+        float:left;
+    }
+}
+
+.bread-crumb{
+    position: relative;
+
+    span, textarea, input, a, i{
+        display: inline-block;
+        float:left;
+    }
+    span{
+        margin-right:8px;
+    }
+    .anchor a:hover{
+        text-decoration: underline;
+    }
+    .anchor a, input.editing, textarea {
+        padding:0 2px;
+        margin:1px 0 0;
+        background:transparent;
+        letter-spacing:1px;
+        font-size: 15px; font-weight:600;
+    }
+    .anchor, input.editing {
+        min-width:300px;
+        height:30px;
+        box-shadow: 2px 3px 3px #eee;
+    }
+    input.editing {
+        background: #fff;
+        position: absolute;
+        top: -3px; left:42px;
+        border: 1px #108ee9 solid;
+        padding: 2px 5px 3px;
+        border-radius: 5px;
+    }
+    .ps-edit-icon{
+        width: 15px;
+        height: 14px;
+        background-position: -253px -134px;
+        position: relative;
+        left: 10px;
+        top: 6px
+    }
+}
+
+.hdfs-panel .panel-top .right .operations .icon-list {
+    padding: 0 10px 0 0;
+    li {
+        width: auto;
+    }
+    li.bolder-right-none {
+        border-right: solid 1px transparent;
+    }
+    li.li-upload {
+        padding-right: 10px;
+    }
+    li.li-setting:hover i.icon-setting {
+        background-position: -212px -411px;
+    }
+    li.li-upload:hover i.icon-upload {
+        background-position: -92px -572px;
+    }
+    li.li-plus:hover i.icon-plus {
+        background-position:-212px -172px;
+    }
+
+    li.li-trash:hover i.icon-trash {
+        background-position:-251px -172px;
+    }
+    .ps {
+        margin: 0 5px;
+    }
+}
+
+/*common*/
+.f16{
+    font-size:16px; font-weight:600;
+}
+
+.checkb input[type="checkbox"]{
+    float:left;
+}
+
+.folder-sign {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+}

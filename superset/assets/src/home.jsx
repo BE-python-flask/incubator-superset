@@ -14,7 +14,7 @@ const _ = require('lodash');
 
 const store = configureStore();
 
-$('.nav > li:nth-child(1)').addClass('active');
+// $('.nav > li:nth-child(1)').addClass('active');
 replaceAppName();
 render(
   <Provider store={store}>
