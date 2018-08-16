@@ -42,6 +42,9 @@ export const OBJECT_TYPE = {
 };
 
 export function renderLoadingModal() {
+    const loading_root = document.createElement('div');
+    loading_root.id = 'loading_root';
+    document.body.prepend(loading_root);
     const loadingModal = render(
         <LoadingModal />,
         document.getElementById('loading_root'));
@@ -86,6 +89,10 @@ export function renderGlobalErrorMsg(errorMsg) {
 }
 
 export function renderConfirmModal(msg, type='warning', callback=false) {
+    const popup_root = document.createElement('div');
+    popup_root.id = 'popup_root';
+    document.body.prepend(popup_root);
+
     render(
         <ConfirmModal
             needCallback={callback}

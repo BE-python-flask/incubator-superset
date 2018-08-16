@@ -1,0 +1,18 @@
+{% extends "superset/basic.html" %}
+
+{% block title %}
+	{% if appbuilder and appbuilder.app_name %}
+		{{ appbuilder.app_name }}
+	{% endif %}
+{% endblock %}
+
+{% block body %}
+	<div id="hdfsList"></div>
+{% endblock %}
+
+{% block tail_js %}
+	{{super()}}
+	{% with filename="hdfsList" %}
+		{% include "superset/partials/_script_tag.html" %}
+	{% endwith %}
+{% endblock %}

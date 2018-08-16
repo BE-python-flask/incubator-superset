@@ -17,6 +17,8 @@ module.exports = {
   },
   entry: {
      home: APP_DIR + '/src/home.jsx',
+     hdfsList: APP_DIR + '/src/hdfsList.js',
+
     theme: APP_DIR + '/src/theme.js',
     common: APP_DIR + '/src/common.js',
     addSlice: APP_DIR + '/src/addSlice/index.jsx',

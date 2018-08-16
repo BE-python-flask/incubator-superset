@@ -1,0 +1,159 @@
+@import 'hdfs.scss';
+
+*{margin:0;padding:0;border:0;}
+ul,li{
+    list-style: none;
+}
+
+
+.file-browse{
+    background-color:#edf0f5;
+
+    .icon{
+        width:24px; height:24px;
+        margin-bottom:-5px;
+    }
+}
+.icon-browser-ps{
+    margin: 3px 10px 0 20px;
+}
+.icon-pattern-ps{
+    width:20px; height:20px;
+    float:left;
+    margin-top:18px;
+}
+.title-bar{
+    height:50px;
+    width:100%;
+    font-size:18px;
+    display:flex;
+    align-items: center;
+    background:#fff;
+
+}
+.content{
+    overflow:auto;
+    padding:20px 20px 0;
+}
+.clear{
+    clear:both;
+}
+
+.fleft{
+    float:left;
+    display:inline-block;
+}
+.fright{
+    float:right;
+}
+.item-left{
+    border-radius:5px;
+}
+.item-right{
+    margin-left:380px;
+    background:#fff;
+    border-radius:5px;
+    border:1px #ddd solid;
+    overflow:hidden;
+
+
+}
+.file-browse .item-left-module{
+    width:362px;
+    border-radius :4px;
+    border:1px solid #e7e9ed;
+    background-color:#fff;
+}
+.file-browse .item-left-module h3{
+    font: 16px/40px Miscrosoft YaHei;
+    color:#1d2531;
+    padding-left: 10px;
+    border-bottom:1px solid #e7e9ed;
+}
+.file-browse .item-left-module li{
+    display:flex;
+    justify-content:space-between ;
+    align-items: center;
+    font:12px/42px Miscrosoft YaHei;
+    color:#1d2531;
+    padding:0 10px;
+}
+.infor{
+    margin-top:20px;
+}
+.infor li span{
+    color:#7c8ca5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.infor li span .icon{
+    padding-right:10px;
+}
+.infor li em{
+    color:#1d2531;
+    font:normal 14px Miscrosoft YaHei;
+}
+
+.tableWrapper{
+    padding:20px 10px;
+}
+
+.edit-slice-ps{
+    margin:0 12px 0 20px
+}
+
+/* upload file css style start*/
+.file-browser, .file-name, .file-upload {
+    width: 200px;
+    height: 40px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+.file-browser {
+    cursor: pointer;
+    background-color: #279cf2;
+    span {
+        margin-left: 5px;
+    }
+}
+.file-name {
+    width: 400px;
+    height: auto;
+    padding: 10px 0;
+    justify-content: flex-start;
+    span {
+        margin-left: 5px;
+        overflow: auto;
+    }
+}
+.file-upload {
+    cursor: pointer;
+    background-color: #2ccc26;
+    .file-select {
+        position: absolute;
+        clip: rect(0 0 0 0);
+    }
+}
+/* upload file css style end */
+
+.bread-crumb.sec-class{
+
+    padding: 10px;
+    height: 30px;
+
+    textarea{
+        height:30px; overflow-y:hidden;
+        width:420px;
+    }
+
+    .path{
+        height: 30px;
+        overflow-y: hidden;
+        width: 400px;
+    }
+
+}

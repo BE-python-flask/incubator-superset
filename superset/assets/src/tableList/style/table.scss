@@ -1,0 +1,212 @@
+@import '../../../stylesheets/scss/global';
+
+.HDFS{
+    width:14px;height:16px;background-position:-133px -371px;
+    cursor: default;
+}
+.Inceptor{
+    width:13px;height:21px;background-position:-93px -369px;
+    cursor: default;
+}
+.upload{
+    width:15px;height:16px;background-position:-172px -371px;
+    cursor: default;
+}
+
+.icon-filter {
+    zoom: 0.9;
+}
+
+.list-table-column {
+    background-color: #fff;
+    input[type="checkbox"][readonly] {
+        pointer-events: none;
+    }
+
+    input[type="checkbox"] {
+        float: none;
+    }
+}
+.sql-metric {
+    background-color: #fff;
+}
+
+.columns-input, .metrics-input {
+    border-color: transparent;
+    background-color: transparent;
+    &:hover, &:focus {
+        background-color: #fff;
+        border: $borderStyleFocus;
+    }
+}
+
+.ant-table-small .ant-table-thead > tr > th.text-column {
+    padding-left: 18px;
+}
+
+.sql-metric .ant-select .ant-select-selection {
+    border: 1px solid transparent;
+    background-color: transparent;
+}
+
+.sql-metric .ant-select .ant-select-selection .ant-select-arrow {
+    visibility: hidden;
+}
+
+.sql-metric .ant-select:hover .ant-select-selection {
+    border: 1px solid #dfe3e9;
+    background-color: #fff;
+}
+
+.sql-metric .ant-select:hover .ant-select-selection .ant-select-arrow {
+    visibility: visible;
+}
+
+ul > li .ant-select-selection {
+    border: none;
+    height: 26px;
+}
+
+.file-browser, .file-name, .file-upload {
+    width: 200px;
+    height: 40px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+.file-browser {
+    cursor: pointer;
+    background-color: #279cf2;
+    span {
+        margin-left: 5px;
+    }
+}
+.file-name {
+    justify-content: flex-start;
+    span {
+        margin-left: 5px;
+    }
+}
+.file-upload {
+    cursor: pointer;
+    background-color: #2ccc26;
+    .file-select {
+        position: absolute;
+        clip: rect(0 0 0 0);
+    }
+}
+
+.table-content .ant-table-placeholder {
+    display: none;
+}
+
+.table-content .ant-table-header{
+    display: none;
+}
+
+.data-preview-box {
+    background-color: #fff;
+}
+
+.data-preview-box .table-content .ant-table-small {
+    border-top: none;
+}
+
+.preview-table {
+    overflow-x: auto;
+    padding-top: 30px;
+}
+
+.ant-table-thead > tr > th {
+    word-break: normal;
+}
+
+.ant-table-tbody > tr > td {
+    word-break: normal;
+}
+
+.link-disabled {
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.hdfs-table-header .ant-table-thead {
+    display: none;
+}
+
+.editable-table-header {
+    border-left: solid 2px #fff;
+    border-top: solid 1px #dfe3e9;
+    background-color: #fff;
+    display: flex;
+    align-items: center;
+
+    > input {
+        @include tp-input-style;
+        height: 32px;
+        margin: 0;
+    }
+}
+
+.column-type {
+    display: block;
+    border: 1px solid #e9e9e9;
+    border-radius: 4px;
+    height: 28px;
+    line-height: 28px;
+    margin-right: 5px;
+    padding-left: 5px;
+}
+
+.preview-tb-cell {
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 5px;
+    padding-left: 10px;
+}
+
+.preview-table .ant-table-small .ant-table-tbody > tr > td {
+    padding: 6px 0;
+}
+
+.preview-table .table-content .ant-table-thead {
+    display: none;
+}
+
+.preview-table .table-content .ant-table-body {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+}
+
+.preview-table .ant-table-thead > tr > th {
+    padding: 10px 5px;
+}
+
+.preview-table .ant-table-small > .ant-table-content > .ant-table-body > table > .ant-table-tbody > tr > td {
+    padding: 0;
+}
+
+.ant-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    input[type="checkbox"] {
+        position: absolute;
+        top: 0;
+    }
+}
+
+.hdfs-data-type .ant-table-small .ant-table-tbody > tr > td {
+    padding: 6px 5px;
+}
+
+
+
+
+
+
