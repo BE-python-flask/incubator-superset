@@ -1,7 +1,7 @@
 from flask import g
 from flask_appbuilder import expose
-from superset.exception import SupersetException
-from superset import sm
+from superset.exceptions import SupersetException2
+from superset import security_manager
 from superset.message import *
 from .base import BaseSupersetView, catch_exception, json_response
 
@@ -16,7 +16,7 @@ class UserView(BaseSupersetView):
     @catch_exception
     @expose('/list/', methods=['GET'])
     def list(self):
-        users = sm.get_all_users()
+        users = security_manager.get_all_users()
         data = []
         for user in users:
             line = {}
@@ -45,7 +45,7 @@ class UserView(BaseSupersetView):
     @catch_exception
     @expose('/show/<pk>/', methods=['GET'])
     def show(self, pk):
-        user = sm.get_user_by_id(pk)
+        user = security_manager.get_user_by_id(pk)
         data = {}
         for col in self.show_columns:
             data[col] = str(getattr(user, col))
@@ -57,16 +57,16 @@ class UserView(BaseSupersetView):
     def edit(self, pk):
         data = self.get_request_data()
         username = data.get('username')
-        user = sm.get_user_by_id(pk)
+        user = security_manager.get_user_by_id(pk)
         self.check_permission(user, 'edit')
         user.first_name = username
         user.last_name = username
         user.username = username
         user.email = data.get('email')
-        rs = sm.update_user(user)
+        rs = security_manager.update_user(user)
         if rs is False:
             return json_response(message=UPDATE_FAILED, status=500)
-        rs = sm.reset_password(pk, data.get('password'))
+        rs = security_manager.reset_password(pk, data.get('password'))
         if rs is False:
             return json_response(message='Update password failed', status=500)
         return json_response(message=UPDATE_SUCCESS)
@@ -74,9 +74,9 @@ class UserView(BaseSupersetView):
     @catch_exception
     @expose('/delete/<pk>/', methods=['GET'])
     def delete(self, pk):
-        user = sm.get_user_by_id(pk)
+        user = security_manager.get_user_by_id(pk)
         self.check_permission(user, 'delete')
-        rs = sm.del_register_user(user)
+        rs = security_manager.del_register_user(user)
         if not rs:
             return json_response(message=DELETE_FAILED, status=500)
         return json_response(message=DELETE_SUCCESS, status=500)

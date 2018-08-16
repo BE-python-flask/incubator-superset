@@ -6,7 +6,7 @@ from superset import db, app
 from superset.utils import GUARDIAN_AUTH
 from superset.models import Database, str_to_model, Log, Number, model_name_columns
 from superset.message import DISABLE_GAURDIAN
-from superset.exception import ParameterException, PermissionException
+from superset.exceptions import ParameterException, PermissionException
 from .base import BaseSupersetView, PermissionManagement, catch_exception, json_response
 
 config = app.config

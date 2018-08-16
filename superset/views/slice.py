@@ -7,7 +7,7 @@ from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.sqla.models import User
 
 from superset import app, db, utils
-from superset.exception import ParameterException, PropertyException
+from superset.exceptions import ParameterException, PropertyException
 from superset.models import Database, Dataset, Slice, Dashboard, FavStar
 from superset.message import *
 from superset.viz import viz_verbose_names

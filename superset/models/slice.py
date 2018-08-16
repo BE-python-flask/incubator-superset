@@ -20,9 +20,9 @@ from sqlalchemy.orm import relationship, backref
 from sqlalchemy.orm.session import make_transient
 from urllib import parse  # noqa
 
-from superset import app, db, utils, sm
+from superset import app, db, utils, security_manager
 from superset.viz import viz_types
-from superset.exception import ParameterException, PermissionException
+from superset.exceptions import ParameterException, PermissionException
 from .base import AuditMixinNullable, ImportMixin
 from .dataset import Dataset
 from .connection import Database
@@ -59,7 +59,7 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
     department = Column(String(256))
     cache_timeout = Column(Integer)
     perm = Column(String(1000))
-    owners = relationship(sm.user_model, secondary=slice_user)
+    owners = relationship(security_manager.user_model, secondary=slice_user)
 
     __table_args__ = (
         UniqueConstraint('slice_name', name='slice_name_uc'),

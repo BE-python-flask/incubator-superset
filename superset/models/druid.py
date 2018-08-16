@@ -35,8 +35,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import backref, relationship
 
-from superset import conf, db, import_util, sm, utils
-from superset.exception import SupersetException
+from superset import conf, db, import_util, security_manager, utils
+from superset.exceptions import SupersetException
 from superset.models.base import AuditMixinNullable, ImportMixin, QueryResult
 from superset.models.datasource_base import BaseColumn, BaseDatasource, BaseMetric
 from superset.utils import DimSelector, DTTM_ALIAS, flasher
@@ -467,7 +467,7 @@ class DruidDatasource(Model, BaseDatasource):
         'DruidCluster', backref='datasources', foreign_keys=[cluster_name])
     user_id = Column(Integer, ForeignKey('ab_user.id'))
     owner = relationship(
-        sm.user_model,
+        security_manager.user_model,
         backref=backref('datasources', cascade='all, delete-orphan'),
         foreign_keys=[user_id])
     UniqueConstraint('cluster_name', 'datasource_name')
@@ -508,7 +508,7 @@ class DruidDatasource(Model, BaseDatasource):
     @property
     def schema_perm(self):
         """Returns schema permission if present, cluster one otherwise."""
-        return sm.get_schema_perm(self.cluster, self.schema)
+        return security_manager.get_schema_perm(self.cluster, self.schema)
 
     def get_perm(self):
         return (
@@ -1014,7 +1014,7 @@ class DruidDatasource(Model, BaseDatasource):
             m.metric_name for m in self.metrics
             if m.is_restricted and
                m.metric_name in aggregations.keys() and
-               not sm.has_access('metric_access', m.perm)
+               not security_manager.has_access('metric_access', m.perm)
         ]
         if rejected_metrics:
             raise SupersetException(

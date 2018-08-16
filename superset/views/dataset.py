@@ -12,7 +12,7 @@ from flask_appbuilder.security.sqla.models import User
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from superset import app, db
-from superset.exception import (
+from superset.exceptions import (
     ParameterException, DatabaseException, HDFSException, PropertyException,
     ErrorRequestException
 )

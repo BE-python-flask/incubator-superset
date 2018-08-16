@@ -20,12 +20,13 @@ from urllib import parse
 from urllib.parse import quote
 from werkzeug.routing import BaseConverter
 
-from superset import app, db, appbuilder, sql_lab, results_backend, viz, utils
-from superset import sm as security_manager
+from superset import (
+    app, db, appbuilder, sql_lab, results_backend, viz, utils, security_manager
+)
 from superset import simple_cache as cache
-from superset.exception import (
+from superset.exceptions import (
     PropertyException, DatabaseException, ErrorRequestException,
-    SupersetException, PermissionException
+    SupersetException2, PermissionException
 )
 from superset.jinja_context import get_template_processor
 from superset.legacy import cast_form_data
@@ -36,7 +37,7 @@ from superset.models import (
     AnnotationDatasource
 )
 from superset.utils import merge_extra_filters, merge_request_params
-from superset.source_registry import SourceRegistry
+from superset.connector_registry import ConnectorRegistry
 from superset.sql_parse import SupersetQuery
 from superset.timeout_decorator import connection_timeout
 
@@ -217,7 +218,7 @@ class Superset(BaseSupersetView, PermissionManagement):
 
     @expose('/datasources/')
     def datasources(self):
-        datasources = SourceRegistry.get_all_datasources(db.session)
+        datasources = ConnectorRegistry.get_all_datasources(db.session)
         datasources = [o.short_data for o in datasources]
         datasources = sorted(datasources, key=lambda o: o['name'])
         return self.json_response(datasources)
@@ -252,7 +253,7 @@ class Superset(BaseSupersetView, PermissionManagement):
                         dbs['name'], ds_name, schema=schema['name'])
                     db_ds_names.add(fullname)
 
-        existing_datasources = SourceRegistry.get_all_datasources(db.session)
+        existing_datasources = ConnectorRegistry.get_all_datasources(db.session)
         datasources = [
             d for d in existing_datasources if d.full_name in db_ds_names]
         role = security_manager.find_role(role_name)
@@ -288,7 +289,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         datasource_id = request.args.get('datasource_id')
         datasource_type = request.args.get('datasource_type')
         if datasource_id:
-            ds_class = SourceRegistry.sources.get(datasource_type)
+            ds_class = ConnectorRegistry.sources.get(datasource_type)
             datasource = (
                 db.session.query(ds_class)
                     .filter_by(id=int(datasource_id))
@@ -324,7 +325,7 @@ class Superset(BaseSupersetView, PermissionManagement):
     def approve(self):
         def clean_fulfilled_requests(session):
             for r in session.query(DAR).all():
-                datasource = SourceRegistry.get_datasource(
+                datasource = ConnectorRegistry.get_datasource(
                     r.datasource_type, r.datasource_id, session)
                 user = security_manager.get_user_by_id(r.created_by_fk)
                 if not datasource or \
@@ -339,7 +340,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         role_to_extend = request.args.get('role_to_extend')
 
         session = db.session
-        datasource = SourceRegistry.get_datasource(
+        datasource = ConnectorRegistry.get_datasource(
             datasource_type, datasource_id, session)
 
         if not datasource:
@@ -459,7 +460,7 @@ class Superset(BaseSupersetView, PermissionManagement):
             if database_id and full_tb_name:
                 datasource = Dataset.temp_dataset(database_id, full_tb_name)
             else:
-                datasource = SourceRegistry.get_datasource(
+                datasource = ConnectorRegistry.get_datasource(
                     datasource_type, datasource_id, db.session)
             if not datasource:
                 raise PropertyException('Missing a dataset for slice')
@@ -471,7 +472,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             )
             return viz_obj
 
-    @catch_exception
     @expose("/release/<model>/<action>/<id>/", methods=['GET'])
     def release_object(self, model, action, id):
         """model: dashboard, slice, dataset, database, hdfsconnection
@@ -526,7 +526,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             if obj.hdfs_table and obj.hdfs_table.hdfs_connection:
                 cls.release_relations(obj.hdfs_table.hdfs_connection, 'hdfsconnection', user_id)
 
-    @catch_exception
     @expose("/slice/<slice_id>/")
     def slice(self, slice_id):
         form_data, slc = self.get_form_data(slice_id)
@@ -649,7 +648,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             status = 400
         return json_success(viz_obj.json_dumps(payload), status=status)
 
-    @catch_exception
     @expose("/explore_json/<datasource_type>/<datasource_id>/")
     @expose('/explore_json/', methods=['GET', 'POST'])
     def explore_json(self, datasource_type, datasource_id):
@@ -719,7 +717,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         datasource_id = int(datasource_id)
         return datasource_id, datasource_type
 
-    @catch_exception
     @expose("/explore/<datasource_type>/<datasource_id>/")
     @expose('/explore/', methods=['GET', 'POST'])
     def explore(self, datasource_type, datasource_id):
@@ -731,7 +728,7 @@ class Superset(BaseSupersetView, PermissionManagement):
             datasource_id, datasource_type, form_data)
 
         error_redirect = '/slice/list/'
-        datasource = SourceRegistry.get_datasource(
+        datasource = ConnectorRegistry.get_datasource(
             datasource_type, datasource_id, db.session)
 
         if not datasource:
@@ -826,7 +823,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             title=title,
             standalone_mode=standalone)
 
-    @catch_exception
     @expose("/filter/<datasource_type>/<datasource_id>/<column>/")
     def filter(self, datasource_type, datasource_id, column):
         """
@@ -838,7 +834,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         :return:
         """
         # TODO: Cache endpoint by user, datasource and column
-        datasource = SourceRegistry.get_datasource(
+        datasource = ConnectorRegistry.get_datasource(
             datasource_type, datasource_id, db.session)
         if not datasource:
             return json_error_response(DATASOURCE_MISSING_ERR)
@@ -979,15 +975,14 @@ class Superset(BaseSupersetView, PermissionManagement):
               "info")
         Log.log_update(slc, 'slice', g.user.id)
 
-    @catch_exception
     @expose('/checkbox/<model_view>/<id_>/<attr>/<value>', methods=['GET'])
     def checkbox(self, model_view, id_, attr, value):
         """endpoint for checking/unchecking any boolean in a sqla model"""
         modelview_to_model = {
             'TableColumnInlineView':
-                SourceRegistry.sources['table'].column_class,
+                ConnectorRegistry.sources['table'].column_class,
             'DruidColumnInlineView':
-                SourceRegistry.sources['druid'].column_class,
+                ConnectorRegistry.sources['druid'].column_class,
         }
         model = modelview_to_model[model_view]
         col = db.session.query(model).filter_by(id=id_).first()
@@ -1000,7 +995,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             db.session.commit()
         return json_success('OK')
 
-    @catch_exception
     @expose("/all_tables/<db_id>/")
     def all_tables(self, db_id):
         """Endpoint that returns all tables and views from the database"""
@@ -1026,7 +1020,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             json.dumps({'schemas': schemas}),
             mimetype='application/json')
 
-    @catch_exception
     @expose('/tables/<db_id>/<schema>/<substr>/')
     def tables(self, db_id, schema, substr):
         """Endpoint to fetch the list of tables for given database"""
@@ -1063,7 +1056,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         }
         return json_success(json.dumps(payload))
 
-    @catch_exception
     @expose("/copy_dash/<dashboard_id>/", methods=['GET', 'POST'])
     def copy_dash(self, dashboard_id):
         """Copy dashboard"""
@@ -1103,7 +1095,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         Log.log_add(dash, Dashboard.model_type, g.user.id)
         return json_success(dash_json)
 
-    @catch_exception
     @expose("/save_dash/<dashboard_id>/", methods=['GET', 'POST'])
     def save_dash(self, dashboard_id):
         """Save a dashboard's metadata"""
@@ -1139,7 +1130,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         md['default_filters'] = data.get('default_filters', '')
         dashboard.json_metadata = json.dumps(md, indent=4)
 
-    @catch_exception
     @expose("/add_slices/<dashboard_id>/", methods=['POST'])
     def add_slices(self, dashboard_id):
         """Add and save slices to a dashboard"""
@@ -1155,7 +1145,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.close()
         return 'SLICES ADDED'
 
-    @catch_exception
     @connection_timeout
     @expose("/testconn/", methods=["POST", "GET"])
     def testconn(self):
@@ -1443,7 +1432,7 @@ class Superset(BaseSupersetView, PermissionManagement):
                 return json_error_response(__(
                     'Chart %(id)s not found', id=slice_id), status=404)
         elif table_name and db_name:
-            SqlaTable = SourceRegistry.sources['table']
+            SqlaTable = ConnectorRegistry.sources['table']
             table = (
                 session.query(SqlaTable)
                 .join(Database)
@@ -1470,7 +1459,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             [{'slice_id': slc.id, 'slice_name': slc.slice_name}
              for slc in slices]))
 
-    @catch_exception
     @expose("/favstar/<class_name>/<obj_id>/<action>/")
     def favstar(self, class_name, obj_id, action):
         """Toggle favorite stars on Slices and Dashboard"""
@@ -1508,7 +1496,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.commit()
         return json_success(json.dumps({'count': count}))
 
-    @catch_exception
     @expose('/if_online/<class_name>/<obj_id>/')
     def if_online(self, class_name, obj_id):
         try:
@@ -1522,7 +1509,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_response(message=utils.error_msg_from_exception(e),
                                  status=500)
 
-    @catch_exception
     @expose("/dashboard/<dashboard_id>/")
     def dashboard(self, dashboard_id):
         """Server side rendering for a dashboard"""
@@ -1623,7 +1609,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         cluster_name = payload['cluster']
 
         user = security_manager.find_user(username=user_name)
-        DruidDatasource = SourceRegistry.sources['druid']
+        DruidDatasource = ConnectorRegistry.sources['druid']
         DruidCluster = DruidDatasource.cluster_class
         if not user:
             err_msg = __("Can't find User '%(name)s', please ask your admin "
@@ -1645,10 +1631,9 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_error_response(utils.error_msg_from_exception(e))
         return Response(status=201)
 
-    @catch_exception
     @expose("/sqllab_viz/", methods=['POST'])
     def sqllab_viz(self):
-        Dataset = SourceRegistry.sources['table']
+        Dataset = ConnectorRegistry.sources['table']
         data = json.loads(request.form.get('data'))
         table_name = data.get('datasourceName')
         template_params = data.get('templateParams')
@@ -1676,7 +1661,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         metrics = []
         for column_name, config in data.get('columns').items():
             is_dim = config.get('is_dim', False)
-            SqlaTable = SourceRegistry.sources['table']
+            SqlaTable = ConnectorRegistry.sources['table']
             TableColumn = SqlaTable.column_class
             SqlMetric = SqlaTable.metric_class
             col = TableColumn(
@@ -1712,7 +1697,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         db.session.commit()
         return self.json_response(json.dumps({ 'table_id': table.id,}))
 
-    @catch_exception
     @expose("/table/<database_id>/<table_name>/<schema>/")
     def table(self, database_id, table_name, schema):
         schema = utils.js_string_to_python(schema)
@@ -1769,7 +1753,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         }
         return json_success(json.dumps(tbl))
 
-    @catch_exception
     @expose('/extra_table_metadata/<database_id>/<table_name>/<schema>/')
     def extra_table_metadata(self, database_id, table_name, schema):
         schema = utils.js_string_to_python(schema)
@@ -1805,7 +1788,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         status = 200 if key_exist else 404
         return json_success(json.dumps({'key_exist': key_exist}), status=status)
 
-    @catch_exception
     @expose("/results/<key>/")
     def results(self, key):
         """Serves a key off of the results backend"""
@@ -1850,7 +1832,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             pass
         return self.json_response('OK')
 
-    @catch_exception
     @expose("/sql_json/", methods=['POST', 'GET'])
     def sql_json(self):
         """Runs arbitrary sql and returns and json"""
@@ -1969,7 +1950,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_error_response(payload=data)
         return json_success(payload)
 
-    @catch_exception
     @expose("/csv/<client_id>/")
     def csv(self, client_id):
         """Download the query results as csv.
@@ -2054,7 +2034,7 @@ class Superset(BaseSupersetView, PermissionManagement):
     def fetch_datasource_metadata(self):
         datasource_id, datasource_type = (
             request.args.get('datasourceKey').split('__'))
-        datasource = SourceRegistry.get_datasource(
+        datasource = ConnectorRegistry.get_datasource(
             datasource_type, datasource_id, db.session)
         # Check if datasource exists
         if not datasource:
@@ -2065,7 +2045,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_error_response(DATASOURCE_ACCESS_ERR)
         return json_success(json.dumps(datasource.data))
 
-    @catch_exception
     @expose("/queries/<last_updated_ms>/")
     def queries(self, last_updated_ms):
         """Get the updated queries."""
@@ -2118,7 +2097,6 @@ class Superset(BaseSupersetView, PermissionManagement):
         return json_success(
             json.dumps(dict_queries, default=utils.json_int_dttm_ser))
 
-    @catch_exception
     @expose("/search_queries/")
     def search_queries(self):
         """Search for queries."""
@@ -2211,7 +2189,6 @@ class Superset(BaseSupersetView, PermissionManagement):
             bootstrap_data=json.dumps(payload, default=utils.json_iso_dttm_ser),
         )
 
-    @catch_exception
     @expose("/sqllab/")
     def sqllab(self):
         """SQL Editor"""

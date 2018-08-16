@@ -10,7 +10,7 @@ from flask_appbuilder.security.sqla.models import User
 from sqlalchemy import and_, or_
 
 from superset import app, db, utils
-from superset.exception import ParameterException, GuardianException
+from superset.exceptions import ParameterException, GuardianException
 from superset.models import (
     Database, Dataset, Slice, Dashboard, Log, FavStar, str_to_model, model_name_columns
 )

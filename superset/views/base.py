@@ -19,15 +19,14 @@ from sqlalchemy import and_, or_
 import traceback
 import yaml
 
-from superset import app, db, models, utils, conf, appbuilder
-from superset import sm as security_manager
+from superset import app, db, models, utils, conf, appbuilder, security_manager
 from superset.utils import GUARDIAN_AUTH
 from superset.models import (
     Dataset, Database, Dashboard, Slice, HDFSConnection, FavStar, Log, Number
 )
 from superset.message import *
-from superset.exception import (
-    SupersetException, LoginException, PermissionException, ParameterException,
+from superset.exceptions import (
+    SupersetException2, LoginException, PermissionException, ParameterException,
     DatabaseException, PropertyException
 )
 from superset.translations.utils import get_language_pack
@@ -57,7 +56,7 @@ def catch_exception(f):
                 return json_response(status=500, message=UPDATE_FAILED, code=1)
             else:
                 return json_response(status=500, message=str(ie), code=1)
-        except SupersetException as e:
+        except SupersetException2 as e:
             logging.exception(e)
             return json_response(status=500, message=e.message, code=e.code)
         except AttributeError as e:

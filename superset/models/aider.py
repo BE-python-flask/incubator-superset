@@ -7,11 +7,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from superset import app, db, sm
+from superset import app, db, security_manager
 from superset import utils
 from superset.utils import GUARDIAN_AUTH
-from superset.exception import PropertyException
-from superset.source_registry import SourceRegistry
+from superset.exceptions import PropertyException
+from superset.connector_registry import ConnectorRegistry
 from .base import AuditMixinNullable
 from .dataset import Dataset, TableColumn, SqlMetric
 from .connection import Database, HDFSConnection, Connection
@@ -268,7 +268,7 @@ class DatasourceAccessRequest(Model, AuditMixinNullable):
 
     @property
     def cls_model(self):
-        return SourceRegistry.sources[self.datasource_type]
+        return ConnectorRegistry.sources[self.datasource_type]
 
     @property
     def username(self):
@@ -294,7 +294,7 @@ class DatasourceAccessRequest(Model, AuditMixinNullable):
     def roles_with_datasource(self):
         action_list = ''
         perm = self.datasource.perm  # pylint: disable=no-member
-        pv = sm.find_permission_view_menu('datasource_access', perm)
+        pv = security_manager.find_permission_view_menu('datasource_access', perm)
         for r in pv.role:
             if r.name in self.ROLES_BLACKLIST:
                 continue

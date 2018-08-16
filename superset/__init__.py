@@ -18,7 +18,7 @@ from superset.cas.cas_session import cas_session
 from superset.cas.keys import (
     CAS_FAKE_SERVICE_TICKET, CAS_FAKE_USERNAME, CAS_SERVICE_TICKET, CAS_USERNAME
 )
-from superset.source_registry import SourceRegistry
+from superset.connector_registry import ConnectorRegistry
 from werkzeug.contrib.fixers import ProxyFix
 from superset import utils, config
 from superset.jvm import start_jvm, shutdown_jvm
@@ -194,7 +194,7 @@ appbuilder = AppBuilder(
     indexview=index_view(),
     security_manager_class=app.config.get("CUSTOM_SECURITY_MANAGER"))
 
-sm = appbuilder.sm
+security_manager = appbuilder.sm
 
 get_session = appbuilder.get_session
 results_backend = app.config.get("RESULTS_BACKEND")
@@ -202,7 +202,7 @@ results_backend = app.config.get("RESULTS_BACKEND")
 # Registering sources
 module_datasource_map = app.config.get("DEFAULT_MODULE_DS_MAP")
 module_datasource_map.update(app.config.get("ADDITIONAL_MODULE_DS_MAP"))
-SourceRegistry.register_sources(module_datasource_map)
+ConnectorRegistry.register_sources(module_datasource_map)
 
 from superset import views, config  # noqa
 

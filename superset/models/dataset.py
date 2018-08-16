@@ -24,9 +24,9 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import table, literal_column, text, column
 from sqlalchemy.sql.expression import ColumnClause, TextAsFrom
 
-from superset import db, app, utils, sm
+from superset import db, app, utils, security_manager
 from superset.utils import DTTM_ALIAS
-from superset.exception import (
+from superset.exceptions import (
     ParameterException, PropertyException, DatabaseException, PermissionException,
     HDFSException
 )
@@ -385,7 +385,7 @@ class Dataset(Model, BaseDatasource):
     @property
     def schema_perm(self):
         """Returns schema permission if present, database one otherwise."""
-        return sm.get_schema_perm(self.database, self.schema)
+        return security_manager.get_schema_perm(self.database, self.schema)
 
     def get_perm(self):
         return "[{obj.database}].[{obj.dataset_name}](id:{obj.id})".format(obj=self)

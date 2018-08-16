@@ -21,7 +21,7 @@ from sqlalchemy import String, DateTime, Date, Float, BigInteger, Integer, Text
 
 from superset import app, db, models, utils
 from superset.models import TableColumn
-from superset.security import get_or_create_main_db
+from superset.utils import get_or_create_main_db
 
 # Shortcuts
 DB = models.Database

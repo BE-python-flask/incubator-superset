@@ -12,7 +12,7 @@ import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from superset import app, db, utils, dataframe, results_backend, sm
+from superset import app, db, utils, dataframe, results_backend, security_manager
 from superset.models import Database, Query
 from superset.sql_parse import SupersetQuery
 from superset.timeout_decorator import sql_timeout
@@ -175,7 +175,7 @@ def execute(ctask, query_id, rendered_query, return_results=True,
     SQL_QUERY_MUTATOR = config.get('SQL_QUERY_MUTATOR')
     if SQL_QUERY_MUTATOR:
         executed_sql = SQL_QUERY_MUTATOR(
-            executed_sql, user_name, sm, database)
+            executed_sql, user_name, security_manager, database)
 
     query.executed_sql = executed_sql
     query.status = QueryStatus.RUNNING

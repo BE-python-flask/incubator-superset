@@ -19,7 +19,7 @@ from fileRobot_common.exception.FileRobotException import FileRobotException
 from superset import app, db, appbuilder
 from superset.cache import TokenCache, FileRobotCache
 from superset.message import *
-from superset.exception import SupersetException, ParameterException, LoginException
+from superset.exceptions import SupersetException2, ParameterException, LoginException
 from superset.models import HDFSConnection
 from superset.utils import human_size
 from .base import BaseSupersetView, catch_exception, json_response
@@ -48,7 +48,7 @@ def catch_hdfs_exception(f):
         except FileRobotException as fe:
             logging.exception(fe)
             return json_response(status=fe.status, code=fe.returnCode, message=fe.message)
-        except SupersetException as se:
+        except SupersetException2 as se:
             logging.exception(se)
             return json_response(status=500, message=str(se), code=se.code)
         except AttributeError as e:

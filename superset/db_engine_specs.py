@@ -42,7 +42,7 @@ from tableschema import Table
 from werkzeug.utils import secure_filename
 
 from superset import app, cache, conf, db, utils
-from superset.exception import SupersetException
+from superset.exceptions import SupersetTemplateException
 from superset.utils import QueryStatus
 
 config = app.config
@@ -941,10 +941,10 @@ class PrestoEngineSpec(BaseEngineSpec):
         """
         indexes = database.get_indexes(table_name, schema)
         if len(indexes[0]['column_names']) < 1:
-            raise SupersetException(
+            raise SupersetTemplateException(
                 'The table should have one partitioned field')
         elif not show_first and len(indexes[0]['column_names']) > 1:
-            raise SupersetException(
+            raise SupersetTemplateException(
                 'The table should have a single partitioned field '
                 'to use this function. You may want to use '
                 '`presto.latest_sub_partition`')
@@ -985,13 +985,13 @@ class PrestoEngineSpec(BaseEngineSpec):
         for k in kwargs.keys():
             if k not in k in part_fields:
                 msg = 'Field [{k}] is not part of the portioning key'
-                raise SupersetException(msg)
+                raise SupersetTemplateException(msg)
         if len(kwargs.keys()) != len(part_fields) - 1:
             msg = (
                 'A filter needs to be specified for {} out of the '
                 '{} fields.'
             ).format(len(part_fields) - 1, len(part_fields))
-            raise SupersetException(msg)
+            raise SupersetTemplateException(msg)
 
         for field in part_fields:
             if field not in kwargs.keys():

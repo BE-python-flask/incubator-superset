@@ -19,7 +19,7 @@ from superset import app, db, models, utils
 from superset.forms import CsvToDatabaseForm
 from superset.timeout_decorator import connection_timeout
 from superset.models import Database, HDFSConnection, Connection, Slice, Dataset
-from superset.exception import ParameterException, PermissionException
+from superset.exceptions import ParameterException, PermissionException
 from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
 from .base import (

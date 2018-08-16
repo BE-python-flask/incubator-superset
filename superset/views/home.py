@@ -14,7 +14,7 @@ from superset import appbuilder, db, app
 from superset.models import (
     Slice, Dashboard, Database, HDFSConnection, FavStar, Log, str_to_model, Number
 )
-from superset.exception import ParameterException
+from superset.exceptions import ParameterException
 from .base import BaseSupersetView, PermissionManagement, catch_exception, json_response
 
 config = app.config

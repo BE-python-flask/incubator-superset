@@ -16,7 +16,8 @@ from sys import stdout
 import werkzeug.serving
 import yaml
 
-from superset import app, sm, db, data, security, dict_import_export_util, utils
+from superset import app, db, data, security, dict_import_export_util, utils
+from superset import security_manager as sm
 from superset.models import HDFSConnection, Log, Database
 
 

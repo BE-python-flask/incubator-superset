@@ -26,7 +26,7 @@ from superset import db, app, db_engine_specs, conf, utils
 from superset.cache import TokenCache
 from superset.cas.keytab import download_keytab
 from superset.utils import GUARDIAN_AUTH
-from superset.exception import GuardianException, PropertyException
+from superset.exceptions import GuardianException, PropertyException
 from superset.message import DISABLE_GUARDIAN_FOR_KEYTAB, DISABLE_CAS
 from .base import AuditMixinNullable, ImportMixin
 

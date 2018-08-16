@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import threading
-from superset.exception import ParameterException
+from superset.exceptions import ParameterException
 
 lock = threading.Lock()
 

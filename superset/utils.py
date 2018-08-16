@@ -40,7 +40,7 @@ import sqlalchemy as sa
 from sqlalchemy import exc, select
 from sqlalchemy.types import TEXT, TypeDecorator
 
-from superset.exception import SupersetException, DatabaseException
+from superset.exceptions import SupersetException, SupersetTimeoutException
 
 
 logging.getLogger('MARKDOWN').setLevel(logging.INFO)
@@ -91,7 +91,7 @@ def add_or_edit_user(appbuilder, username, password):
                 username, username, username, '{}@transwarp.io'.format(username),
                 appbuilder.sm.find_role('Admin'),  password=password)
             if not user:
-                raise DatabaseException('Add user: [{}] failed'.format(username))
+                raise SupersetException('Add user: [{}] failed'.format(username))
         appbuilder.sm.reset_password(user.id, password)
         user.password2 = password
         appbuilder.sm.get_session.commit()
@@ -555,7 +555,7 @@ class timeout(object):
 
     def handle_timeout(self, signum, frame):
         logging.error('Process timed out')
-        raise SupersetException(self.error_message)
+        raise SupersetTimeoutException(self.error_message)
 
     def __enter__(self):
         try:
@@ -849,6 +849,28 @@ def user_label(user):
             return user.first_name + ' ' + user.last_name
         else:
             return user.username
+
+
+def get_or_create_main_db():
+    from superset import conf, db
+    from superset.models import Database
+
+    main_conn_name = conf.get("METADATA_CONN_NAME")
+    dbobj = (
+        db.session.query(Database)
+            .filter_by(database_name=main_conn_name)
+            .first()
+    )
+    if not dbobj:
+        logging.info("Creating database reference")
+        dbobj = Database(database_name=main_conn_name)
+    uri = conf.get("SQLALCHEMY_DATABASE_URI")
+    dbobj.online = True
+    dbobj.expose = False
+    dbobj.set_sqlalchemy_uri(uri)
+    db.session.add(dbobj)
+    db.session.commit()
+    return dbobj
 
 
 def is_adhoc_metric(metric):

@@ -10,8 +10,8 @@ from flask_appbuilder.models.decorators import renders
 from sqlalchemy import Column, Integer,DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declared_attr
 
-from superset import app, db, sm
-from superset.exception import ParameterException, PropertyException
+from superset import app, db, security_manager
+from superset.exceptions import ParameterException, PropertyException
 from superset.utils import QueryStatus
 from superset.message import NAME_RESTRICT_ERROR
 
@@ -335,4 +335,4 @@ def set_perm(mapper, connection, target):  # noqa
                 )
 
     # add to view menu if not already exists
-    merge_perm(sm, 'datasource_access', target.get_perm(), connection)
+    merge_perm(security_manager, 'datasource_access', target.get_perm(), connection)
