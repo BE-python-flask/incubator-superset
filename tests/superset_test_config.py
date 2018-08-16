@@ -2,9 +2,18 @@
 # flake8: noqa
 from superset.config import *
 
+CAS_AUTH = False
+GUARDIAN_AUTH = False
+
+LICENSE_CHECK = False
+ENABLE_TIME_ROTATE = False
+
 AUTH_USER_REGISTRATION_ROLE = 'alpha'
-SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(DATA_DIR, 'unittests.db')
+#SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(DATA_DIR, 'unittests.db')
+SQLALCHEMY_DATABASE_URI = 'mysql://pilot:123456@172.16.130.109:3306/pilot_merge_superset?charset=utf8'
+
 DEBUG = True
+
 SUPERSET_WEBSERVER_PORT = 8081
 
 # Allowing SQLALCHEMY_DATABASE_URI to be defined as an env var for
