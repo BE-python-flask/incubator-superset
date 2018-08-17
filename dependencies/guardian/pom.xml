@@ -6,37 +6,37 @@
 
     <groupId>io.transwarp</groupId>
     <artifactId>guardian-client</artifactId>
-    <version>2.0-transwarp-5.2.0</version>
+    <version>3.0-transwarp-6.0.0</version>
 
     <dependencies>
         <!-- guardian client -->
         <dependency>
             <groupId>io.transwarp.guardian</groupId>
             <artifactId>guardian-client</artifactId>
-            <version>2.0-transwarp-5.2.0</version>
+            <version>3.0-transwarp-6.0.0-SNAPSHOT</version>
         </dependency>
         <!-- guardian common: guardian data models etc. -->
         <dependency>
             <groupId>io.transwarp.guardian</groupId>
             <artifactId>guardian-common</artifactId>
-            <version>2.0-transwarp-5.2.0</version>
+            <version>3.0-transwarp-6.0.0-SNAPSHOT</version>
         </dependency>
         <!-- guardian login service for jetty -->
         <dependency>
             <groupId>io.transwarp.guardian</groupId>
             <artifactId>jetty-tools</artifactId>
-            <version>2.0-transwarp-5.2.0</version>
+            <version>3.0-transwarp-6.0.0-SNAPSHOT</version>
         </dependency>
         <!-- guardian utils: kadmin, keytab, keystore tools -->
         <dependency>
             <groupId>io.transwarp.guardian</groupId>
             <artifactId>guardian-utils</artifactId>
-            <version>2.0-transwarp-5.2.0</version>
+            <version>3.0-transwarp-6.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>2.7.2-transwarp-5.2.0</version>
+            <version>2.7.2-transwarp-6.0.0</version>
         </dependency>
     </dependencies>
 
@@ -45,6 +45,10 @@
             <id>transwarp-snapshots</id>
             <url>http://172.16.1.168:8081/artifactory/libs-release-local</url>
         </snapshotRepository>
+        <repository>
+            <id>transwarp-release</id>
+            <url>http://172.16.1.168:8081/artifactory/libs-release-local</url>
+        </repository>
     </distributionManagement>
 
     <build>
