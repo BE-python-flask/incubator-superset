@@ -1,3 +1,4 @@
+import json
 import time
 from datetime import datetime
 from flask import g, redirect
@@ -7,12 +8,14 @@ from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.sqla.models import User
 
 from superset import app, db, utils
+from superset.connector_registry import ConnectorRegistry
 from superset.exceptions import ParameterException, PropertyException
 from superset.models import Database, Dataset, Slice, Dashboard, FavStar
 from superset.message import *
 from superset.viz import viz_verbose_names
 from .base import (
-    SupersetModelView, PermissionManagement, catch_exception, json_response
+    SupersetModelView, PermissionManagement, catch_exception, json_response,
+    check_ownership
 )
 
 
@@ -26,12 +29,23 @@ class SliceModelView(SupersetModelView, PermissionManagement):
     datamodel = SQLAInterface(Slice)
     route_base = '/slice'
     can_add = False
-    list_columns = ['id', 'slice_name', 'description', 'slice_url', 'viz_type',
-                    'changed_on']
-    edit_columns = ['slice_name', 'description']
-    show_columns = ['id', 'slice_name', 'description', 'created_on', 'changed_on']
-
-    list_template = "superset/list.html"
+    if config.get('USE_OPEN_SUPERSET'):
+        search_columns = (
+            'slice_name', 'description', 'viz_type', 'datasource_name', 'owners',
+        )
+        list_columns = [
+            'slice_link', 'viz_type', 'datasource_link', 'creator', 'modified']
+        order_columns = ['viz_type', 'datasource_link', 'modified']
+        edit_columns = [
+            'slice_name', 'description', 'viz_type', 'owners', 'dashboards',
+            'params', 'cache_timeout']
+        base_order = ('changed_on', 'desc')
+    else:
+        list_columns = ['id', 'slice_name', 'description', 'slice_url', 'viz_type',
+                        'changed_on']
+        edit_columns = ['slice_name', 'description']
+        show_columns = ['id', 'slice_name', 'description', 'created_on', 'changed_on']
+        list_template = "superset/list.html"
 
     str_to_column = {
         'title': Slice.slice_name,
@@ -67,13 +81,63 @@ class SliceModelView(SupersetModelView, PermissionManagement):
             self.handle_exception(404, Exception, msg)
         return objs
 
-    def post_delete(self, obj):
-        super(SliceModelView, self).post_delete(obj)
-        db.session.query(FavStar) \
-            .filter(FavStar.class_name.ilike(self.model_type),
-                    FavStar.obj_id == obj.id) \
-            .delete(synchronize_session=False)
-        db.session.commit()
+    if config.get('USE_OPEN_SUPERSET'):
+        def pre_add(self, obj):
+            utils.validate_json(obj.params)
+
+        def pre_update(self, obj):
+            utils.validate_json(obj.params)
+            check_ownership(obj)
+
+        def pre_delete(self, obj):
+            check_ownership(obj)
+
+        @expose('/add', methods=['GET', 'POST'])
+        def add(self):
+            datasources = ConnectorRegistry.get_all_datasources(db.session)
+            datasources = [
+                {'value': str(d.id) + '__' + d.type, 'label': repr(d)}
+                for d in datasources
+            ]
+            return self.render_template(
+                'superset/add_slice.html',
+                bootstrap_data=json.dumps({
+                    'datasources': sorted(datasources, key=lambda d: d['label']),
+                }),
+            )
+    else:
+        def post_delete(self, obj):
+            super(SliceModelView, self).post_delete(obj)
+            db.session.query(FavStar) \
+                .filter(FavStar.class_name.ilike(self.model_type),
+                        FavStar.obj_id == obj.id) \
+                .delete(synchronize_session=False)
+            db.session.commit()
+
+        @catch_exception
+        @expose('/add/', methods=['GET'])
+        def add(self):
+            global_read = True
+            readable_names = []
+            if self.guardian_auth:
+                from superset.guardian import guardian_client as client
+                if not client.check_global_read(g.user.username):
+                    global_read = False
+                    readable_names = \
+                        client.search_model_perms(g.user.username, Dataset.guardian_type)
+
+            if global_read:
+                dataset = db.session.query(Dataset).order_by(Dataset.id).first()
+            else:
+                dataset = db.session.query(Dataset) \
+                    .filter(Dataset.dataset_name.in_(readable_names)) \
+                    .order_by(Dataset.id.asc()) \
+                    .first()
+
+            if dataset:
+                return redirect(dataset.explore_url)
+            else:
+                raise PropertyException(NO_USEABLE_DATASETS)
 
     def check_column_values(self, obj):
         if not obj.slice_name:
@@ -207,31 +271,6 @@ class SliceModelView(SupersetModelView, PermissionManagement):
             conns.append(dataset.hdfs_table.hdfs_connection)
         return {'dataset': [dataset, ] if dataset else [],
                 'connection': list(set(conns))}
-
-    @catch_exception
-    @expose('/add/', methods=['GET'])
-    def add(self):
-        global_read = True
-        readable_names = []
-        if self.guardian_auth:
-            from superset.guardian import guardian_client as client
-            if not client.check_global_read(g.user.username):
-                global_read = False
-                readable_names = \
-                    client.search_model_perms(g.user.username, Dataset.guardian_type)
-
-        if global_read:
-            dataset = db.session.query(Dataset).order_by(Dataset.id).first()
-        else:
-            dataset = db.session.query(Dataset) \
-                .filter(Dataset.dataset_name.in_(readable_names)) \
-                .order_by(Dataset.id.asc()) \
-                .first()
-
-        if dataset:
-            return redirect(dataset.explore_url)
-        else:
-            raise PropertyException(NO_USEABLE_DATASETS)
 
     def get_object_list_data(self, **kwargs):
         """

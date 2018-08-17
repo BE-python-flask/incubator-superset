@@ -65,7 +65,6 @@ def parse_feature_toggles():
 def get_manifest_file(filename):
     if app.debug:
         parse_manifest_json()
-    m = manifest
     return '/static/assets/dist/' + manifest.get(filename, '')
 
 

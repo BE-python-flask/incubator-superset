@@ -15,7 +15,7 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
-from superset import app, db, models, utils
+from superset import app, db, models, utils, security_manager
 from superset.forms import CsvToDatabaseForm
 from superset.timeout_decorator import connection_timeout
 from superset.models import Database, HDFSConnection, Connection, Slice, Dataset
@@ -24,13 +24,84 @@ from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
 from .base import (
     SupersetModelView, BaseSupersetView, PageMixin, catch_exception, json_response,
-    PermissionManagement
+    PermissionManagement, DeleteMixin, YamlExportMixin,
+    SupersetModelView1, SupersetModelView2
 )
 
 config = app.config
 
 
-class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
+class DatabaseView1(SupersetModelView1, DeleteMixin, YamlExportMixin):  # noqa
+    datamodel = SQLAInterface(models.Database)
+
+    list_title = _('List Databases')
+    show_title = _('Show Database')
+    add_title = _('Add Database')
+    edit_title = _('Edit Database')
+
+    list_columns = [
+        'database_name', 'backend', 'allow_run_sync', 'allow_run_async',
+        'allow_dml', 'creator', 'modified']
+    order_columns = [
+        'database_name', 'allow_run_sync', 'allow_run_async', 'allow_dml',
+        'modified',
+    ]
+    add_columns = [
+        'database_name', 'sqlalchemy_uri', 'cache_timeout', 'args',
+        'expose', 'allow_run_sync', 'allow_run_async',
+        'allow_ctas', 'allow_dml', 'force_ctas_schema', 'impersonate_user',
+        'allow_multi_schema_metadata_fetch',
+    ]
+    search_exclude_columns = (
+        'password', 'tables', 'created_by', 'changed_by', 'queries',
+        'saved_queries')
+    edit_columns = add_columns
+    show_columns = [
+        'tables',
+        'cache_timeout',
+        'extra',
+        'database_name',
+        'sqlalchemy_uri',
+        'perm',
+        'created_by',
+        'created_on',
+        'changed_by',
+        'changed_on',
+    ]
+    add_template = 'superset/models/database/add.html'
+    edit_template = 'superset/models/database/edit.html'
+    base_order = ('changed_on', 'desc')
+    label_columns = {
+        'expose_in_sqllab': _('Expose in SQL Lab'),
+        'allow_ctas': _('Allow CREATE TABLE AS'),
+        'allow_dml': _('Allow DML'),
+        'force_ctas_schema': _('CTAS Schema'),
+        'database_name': _('Database'),
+        'creator': _('Creator'),
+        'changed_on_': _('Last Changed'),
+        'sqlalchemy_uri': _('SQLAlchemy URI'),
+        'cache_timeout': _('Cache Timeout'),
+        'args': _('Extra'),
+        'allow_run_sync': _('Allow Run Sync'),
+        'allow_run_async': _('Allow Run Async'),
+        'impersonate_user': _('Impersonate the logged on user'),
+    }
+
+    def pre_add(self, db):
+        db.set_sqlalchemy_uri(db.sqlalchemy_uri)
+        security_manager.merge_perm('database_access', db.perm)
+        for schema in db.all_schema_names():
+            security_manager.merge_perm(
+                'schema_access', security_manager.get_schema_perm(db, schema))
+
+    def pre_update(self, db):
+        self.pre_add(db)
+
+    def _delete(self, pk):
+        DeleteMixin._delete(self, pk)
+
+
+class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
     model = models.Database
     model_type = model.model_type
     datamodel = SQLAInterface(models.Database)
@@ -43,7 +114,6 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
     add_template = "superset/models/database/add.html"
     edit_template = "superset/models/database/edit.html"
     base_order = ('changed_on', 'desc')
-    description_columns = {}
 
     str_to_column = {
         'title': Database.database_name,
@@ -56,8 +126,6 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
     bool_columns = ['expose', 'allow_run_sync', 'allow_dml']
     str_columns = ['created_on', 'changed_on']
 
-    list_template = "superset/databaseList.html"
-
     def pre_add(self, obj):
         self.check_column_values(obj)
         obj.set_sqlalchemy_uri(obj.sqlalchemy_uri)
@@ -65,7 +133,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
     def pre_update(self, old_obj, new_obj):
         if old_obj.database_name == config.get('DEFAULT_INCEPTOR_CONN_NAME'):
             raise PermissionException(CANNOT_EDIT_DEFAULT_CONN)
-        super(DatabaseView, self).pre_update(old_obj, new_obj)
+        super(DatabaseView2, self).pre_update(old_obj, new_obj)
 
     def check_column_values(self, obj):
         if not obj.database_name:
@@ -77,7 +145,7 @@ class DatabaseView(SupersetModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION_ARGS)
 
     def get_list_args(self, args):
-        kwargs = super(DatabaseView, self).get_list_args(args)
+        kwargs = super(DatabaseView2, self).get_list_args(args)
         kwargs['database_type'] = args.get('database_type')
         return kwargs
 
@@ -492,7 +560,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
                     "Error parameter ids: {ids}, queried {num} connection(s)")
                                          .format(ids=db_ids, num=len(objs))
                                          )
-            db_view = DatabaseView()
+            db_view = DatabaseView2()
             for id in db_ids:
                 db_view.delete(id)
         #
@@ -703,7 +771,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
         }
 
 
-class DatabaseAsync(DatabaseView):
+class DatabaseAsync(DatabaseView1):
     list_columns = [
         'id', 'database_name',
         'expose_in_sqllab', 'allow_ctas', 'force_ctas_schema',
@@ -758,5 +826,5 @@ class CsvToDatabaseView(SimpleFormView):
         return redirect('/tablemodelview/list/')
 
 
-class DatabaseTablesAsync(DatabaseView):
+class DatabaseTablesAsync(DatabaseView1):
     list_columns = ['id', 'all_table_names', 'all_schema_names']

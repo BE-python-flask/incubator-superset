@@ -179,7 +179,7 @@ class DatasetModelView(SupersetModelView, PermissionManagement):  # noqa
     bool_columns = ['is_featured', 'filter_select_enabled']
     str_columns = ['database', 'created_on', 'changed_on']
 
-    list_template = "superset/tableList.html"
+    #list_template = "superset/tableList.html"
 
     @catch_exception
     @expose('/schemas/<database_id>/', methods=['GET', ])
