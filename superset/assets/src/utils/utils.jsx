@@ -42,9 +42,13 @@ export const OBJECT_TYPE = {
 };
 
 export function renderLoadingModal() {
-    const loading_root = document.createElement('div');
-    loading_root.id = 'loading_root';
-    document.body.prepend(loading_root);
+    let id = 'loading_root';
+    let loading_root = document.getElementById(id);
+    if (!loading_root) {
+        loading_root = document.createElement('div');
+        loading_root.id = id;
+        document.body.prepend(loading_root);
+    }
     const loadingModal = render(
         <LoadingModal />,
         document.getElementById('loading_root'));
@@ -89,9 +93,14 @@ export function renderGlobalErrorMsg(errorMsg) {
 }
 
 export function renderConfirmModal(msg, type='warning', callback=false) {
-    const popup_root = document.createElement('div');
-    popup_root.id = 'popup_root';
-    document.body.prepend(popup_root);
+    const id = 'popup_root';
+    let popup_root = document.getElementById(id);
+
+    if (!popup_root) {
+        popup_root = document.createElement('div');
+        popup_root.id = id;
+        document.body.prepend(popup_root);
+    }
 
     render(
         <ConfirmModal

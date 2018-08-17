@@ -8,7 +8,7 @@ import re
 from enum import Enum
 from jpype import *
 from superset import conf
-from superset.exception import GuardianException, SupersetException
+from superset.exceptions import GuardianException, SupersetException
 
 
 RELOGIN_CODES = ['401', '61010']

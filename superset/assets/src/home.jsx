@@ -5,6 +5,7 @@ import { HashRouter, Route, Link, IndexRoute } from 'react-router-dom';
 import configureStore from './home/store/configureStore';
 import { Home, EditDetail, EventDetail } from './home/containers';
 import { replaceAppName } from './utils/utils';
+// import '../stylesheets/scss/_home.scss'
 
 const $ = window.$ = require('jquery');
 const jQuery = window.jQuery = require('jquery'); // eslint-disable-line

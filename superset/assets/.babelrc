@@ -24,7 +24,8 @@
     "transform-object-rest-spread",
     "transform-export-extensions",
     "transform-decorators-legacy",
-    "transform-class-properties", ["import", {
+    "transform-class-properties",
+    ["import", {
       libraryName: "antd",
       style: "css"
     }],

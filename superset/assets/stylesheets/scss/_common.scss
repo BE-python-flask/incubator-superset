@@ -5,28 +5,6 @@ body{
     font-family: "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "WenQuanYi Micro Hei", sans-serif;
 }
 
-@mixin border() {
-    border:$borderStyle;
-    border-radius:4px;
-    background-color:#fff;
-}
-@mixin arrowBottom() {
-    position:absolute;
-    top:10px;
-    right:7px;
-    border-color:#a8aab7;
-}
-@mixin redStar {
-    color: #ff1111;
-    font-size: 16px;
-    font-weight: bold;
-    margin-right: 5px;
-    position: relative;
-    top: 3px;
-}
-
-$borderStyle :1px solid #e7e9ed;
-
 //文字离两边屏幕的距离
 .boundary-max{
     padding:0 113px;
