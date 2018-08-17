@@ -1,5 +1,6 @@
 import json
 import pickle
+import re
 import time
 from datetime import datetime
 from flask import g, request, Response
@@ -16,7 +17,8 @@ from superset.models import (
 )
 from superset.message import *
 from .base import (
-    SupersetModelView, PermissionManagement, catch_exception, json_response
+    SupersetModelView, PermissionManagement, catch_exception, json_response,
+    check_ownership
 )
 
 
@@ -29,11 +31,21 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
     model_type = model.model_type
     datamodel = SQLAInterface(Dashboard)
     route_base = '/dashboard'
-    list_columns = ['id', 'name', 'url', 'description', 'changed_on']
-    edit_columns = ['name', 'description']
-    show_columns = ['id', 'name', 'description']
-    add_columns = edit_columns
-    list_template = "superset/partials/dashboard/dashboard.html"
+
+    if config.get('USE_OPEN_SUPERSET'):
+        list_columns = ['name', 'creator', 'modified']
+        order_columns = ['modified']
+        edit_columns = ['name', 'slug', 'owners', 'position_json', 'css', 'json_metadata']
+        show_columns = edit_columns + ['table_names', 'slices']
+        search_columns = ('name', 'slug', 'owners')
+        add_columns = edit_columns
+        base_order = ('changed_on', 'desc')
+    else:
+        list_columns = ['id', 'name', 'url', 'description', 'changed_on']
+        edit_columns = ['name', 'description']
+        show_columns = ['id', 'name', 'description']
+        add_columns = edit_columns
+        list_template = "superset/partials/dashboard/dashboard.html"
 
     str_to_column = {
         'title': Dashboard.name,
@@ -46,22 +58,43 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
     bool_columns = ['online']
     str_columns = ['created_on', 'changed_on']
 
-    def pre_add(self, obj):
-        self.check_column_values(obj)
-        utils.validate_json(obj.json_metadata)
-        utils.validate_json(obj.position_json)
+    if config.get('USE_OPEN_SUPERSET'):
+        def pre_add(self, obj):
+            obj.slug = obj.slug.strip() or None
+            if obj.slug:
+                obj.slug = obj.slug.replace(' ', '-')
+                obj.slug = re.sub(r'[^\w\-]+', '', obj.slug)
+            if g.user not in obj.owners:
+                obj.owners.append(g.user)
+            utils.validate_json(obj.json_metadata)
+            utils.validate_json(obj.position_json)
+            owners = [o for o in obj.owners]
+            for slc in obj.slices:
+                slc.owners = list(set(owners) | set(slc.owners))
 
-    def pre_update(self, old_obj, new_obj):
-        self.check_edit_perm(old_obj.guardian_datasource())
-        self.pre_add(new_obj)
+        def pre_update(self, obj):
+            check_ownership(obj)
+            self.pre_add(obj)
 
-    def post_delete(self, obj):
-        super(DashboardModelView, self).post_delete(obj)
-        db.session.query(FavStar) \
-            .filter(FavStar.class_name.ilike(self.model_type),
-                    FavStar.obj_id == obj.id) \
-            .delete(synchronize_session=False)
-        db.session.commit()
+        def pre_delete(self, obj):
+            check_ownership(obj)
+    else:
+        def pre_add(self, obj):
+            self.check_column_values(obj)
+            utils.validate_json(obj.json_metadata)
+            utils.validate_json(obj.position_json)
+
+        def pre_update(self, old_obj, new_obj):
+            self.check_edit_perm(old_obj.guardian_datasource())
+            self.pre_add(new_obj)
+
+        def post_delete(self, obj):
+            super(DashboardModelView, self).post_delete(obj)
+            db.session.query(FavStar) \
+                .filter(FavStar.class_name.ilike(self.model_type),
+                        FavStar.obj_id == obj.id) \
+                .delete(synchronize_session=False)
+            db.session.commit()
 
     def check_column_values(self, obj):
         if not obj.name:

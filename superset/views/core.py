@@ -44,7 +44,7 @@ from superset.timeout_decorator import connection_timeout
 from .base import (
     BaseSupersetView, SupersetModelView, DeleteMixin, PermissionManagement,
     catch_exception, json_response, json_error_response, get_error_msg, CsvResponse,
-    generate_download_headers, get_user_roles
+    generate_download_headers, get_user_roles, check_ownership
 )
 from .hdfs import HDFSBrowser
 from .dashboard import DashboardModelView
@@ -94,46 +94,43 @@ def is_owner(obj, user):
     return obj and user in obj.owners
 
 
-def check_ownership(obj, raise_if_false=True):
-    """Meant to be used in `pre_update` hooks on models to enforce ownership
+if config.get('ENABLE_ACCESS_REQUEST'):
+    class AccessRequestsModelView(SupersetModelView, DeleteMixin):
+        datamodel = SQLAInterface(DAR)
+        list_columns = [
+            'username', 'user_roles', 'datasource_link',
+            'roles_with_datasource', 'created_on']
+        order_columns = ['created_on']
+        base_order = ('changed_on', 'desc')
+        label_columns = {
+            'username': _('User'),
+            'user_roles': _('User Roles'),
+            'database': _('Database URL'),
+            'datasource_link': _('Datasource'),
+            'roles_with_datasource': _('Roles to grant'),
+            'created_on': _('Created On'),
+        }
 
-    Admin have all access, and other users need to be referenced on either
-    the created_by field that comes with the ``AuditMixin``, or in a field
-    named ``owners`` which is expected to be a one-to-many with the User
-    model. It is meant to be used in the ModelView's pre_update hook in
-    which raising will abort the update.
-    """
-    if not obj:
-        return False
+    appbuilder.add_view(
+        AccessRequestsModelView,
+        'Access requests',
+        label=__('Access requests'),
+        category='Security',
+        category_label=__('Security'),
+        icon='fa-table')
 
-    security_exception = PermissionException(
-        "You don't have the rights to alter [{}]".format(obj))
 
-    if g.user.is_anonymous():
-        if raise_if_false:
-            raise security_exception
-        return False
-    roles = (r.name for r in get_user_roles())
-    if 'Admin' in roles:
-        return True
-    session = db.create_scoped_session()
-    orig_obj = session.query(obj.__class__).filter_by(id=obj.id).first()
-    owner_names = (user.username for user in orig_obj.owners)
-    if (
-                    hasattr(orig_obj, 'created_by') and
-                    orig_obj.created_by and
-                    orig_obj.created_by.username == g.user.username):
-        return True
-    if (
-                        hasattr(orig_obj, 'owners') and
-                        g.user and
-                    hasattr(g.user, 'username') and
-                    g.user.username in owner_names):
-        return True
-    if raise_if_false:
-        raise security_exception
-    else:
-        return False
+class LogModelView(SupersetModelView):
+    datamodel = SQLAInterface(Log)
+    list_columns = ('user', 'action', 'dttm')
+    edit_columns = ('user', 'action', 'dttm', 'json')
+    base_order = ('dttm', 'desc')
+    label_columns = {
+        'user': _('User'),
+        'action': _('Action'),
+        'dttm': _('dttm'),
+        'json': _('JSON'),
+    }
 
 
 class KV(BaseSupersetView):
