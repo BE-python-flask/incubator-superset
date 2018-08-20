@@ -111,6 +111,7 @@ class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
                     'args', 'backend',  'created_on', 'changed_on']
     add_columns = ['database_name', 'description', 'sqlalchemy_uri', 'args']
     edit_columns = add_columns
+    list_template = "superset/databaseList.html"
     add_template = "superset/models/database/add.html"
     edit_template = "superset/models/database/edit.html"
     base_order = ('changed_on', 'desc')
@@ -528,6 +529,12 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
     model = models.Connection
     model_type = 'connection'
     route_base = '/connection'
+    list_template = "appbuilder/general/model/list_spec.html"
+
+    @expose('/list/')
+    def list(self):
+        self.update_redirect()
+        return self.render_template(self.list_template)
 
     def get_list_args(self, args):
         kwargs = super(ConnectionView, self).get_list_args(args)
