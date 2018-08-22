@@ -53,7 +53,10 @@ def create_token(service, token_name):
     url = '{}/api/v1/accessToken?ticket={}'.format(service, pt)
     logging.info(url)
 
-    resp = requests.post(url, data=json.dumps(new_token), verify=False)
+    resp = requests.post(url, data=json.dumps(new_token), verify=False,
+                         headers={'Content-Type': 'application/json'})
+    if resp.status_code > 300:
+        raise Exception(resp.text)
     try:
         token = json.loads(resp.text)
     except Exception as e:

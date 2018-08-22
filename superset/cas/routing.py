@@ -193,7 +193,8 @@ def test_proxy_ticket():
 
 @blueprint.route('/test_token/')
 def test_token():
-    token = get_token(g.user.username, 'pilot-token')
+    token_name = request.args.get('token_name', 'pilot-token')
+    token = get_token(g.user.username, token_name)
     return Response(token)
 
 
