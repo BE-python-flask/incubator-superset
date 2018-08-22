@@ -6,7 +6,7 @@ import { connect } from 'react-redux';
 import PropTypes from 'prop-types';
 import * as actions from '../actions';
 import { CONSTANT } from '../actions';
-import * as utils from './../../utils/utils';
+import * as utils from '../../utils/utils';
 import intl from "react-intl-universal";
 
 import '../style/file-browser.scss';

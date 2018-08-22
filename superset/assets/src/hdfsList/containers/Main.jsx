@@ -9,7 +9,7 @@ import {
     loadIntlResources, 
     getUrlParam, 
     renderGlobalErrorMsg 
-} from './../../utils/utils';
+} from '../../utils/utils';
 
 import intl from "react-intl-universal";
 

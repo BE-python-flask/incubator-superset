@@ -13,5 +13,9 @@ export const always = (response) => {
     return Promise.resolve(response);
 };
 export const json = (response) => {
-	return response.json();
+    if (!response || !response.json || response.status == 404) {
+        throw new Error('no response');
+    } else {
+        return response.json();
+    }
 };

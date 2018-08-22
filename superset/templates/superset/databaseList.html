@@ -1,5 +1,10 @@
 {% extends "superset/basic.html" %}
 
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css" href="{{ js_manifest('databaseList' + '.css') }}" />
+{% endblock %}
+
 {% block body %}
 
 <div id="databaseList"></div>
@@ -7,7 +12,8 @@
 {% endblock %}
 
 {% block tail_js %}
-{{ super() }}
-{% set VERSION_STRING = appbuilder.get_app.config.get("VERSION_STRING") %}
-<script src="/static/assets/dist/databaseList.{{VERSION_STRING}}.entry.js"></script>
+{{super()}}
+{% with filename="databaseList" %}
+{% include "superset/partials/_script_tag.html" %}
+{% endwith %}
 {% endblock %}

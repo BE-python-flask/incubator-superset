@@ -30,7 +30,7 @@ export const json = (response) => {
 
 const config = require('../../package.json');
 
-export const PILOT_PREFIX = '/p/';
+export const PILOT_PREFIX = '/superset/';
 
 export const OBJECT_TYPE = {
     DASHBOARD: 'dashboard',
