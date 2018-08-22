@@ -7,13 +7,14 @@ from flask_babel import lazy_gettext as _
 from flask_appbuilder.models.mixins import AuditMixin
 from flask_appbuilder.models.decorators import renders
 
-from sqlalchemy import Column, Integer,DateTime, ForeignKey
+from sqlalchemy import Column, Integer, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declared_attr
 
 from superset import app, db, security_manager
 from superset.exceptions import ParameterException, PropertyException
 from superset.utils import QueryStatus
 from superset.message import NAME_RESTRICT_ERROR
+from .helpers import ImportMixin as SupersetImportMixin
 
 
 config = app.config
@@ -54,7 +55,7 @@ class ValueRestrict(object):
             raise PropertyException(NAME_RESTRICT_ERROR)
 
 
-class ImportMixin(ValueRestrict):
+class ImportMixin(ValueRestrict, SupersetImportMixin):
 
     class Policy(object):
         """
@@ -68,30 +69,30 @@ class ImportMixin(ValueRestrict):
         RENAME = 'rename'
         POLICY_DICT = {'SKIP': SKIP, 'OVERWRITE': OVERWRITE, 'RENAME': RENAME}
 
-    def override(self, obj):
-        """Overrides the plain fields of the dashboard."""
-        for field in obj.__class__.export_fields:
-            setattr(self, field, getattr(obj, field))
-
-    def copy(self):
-        """Creates a copy of the dashboard without relationships."""
-        new_obj = self.__class__()
-        new_obj.override(self)
-        return new_obj
-
-    def alter_params(self, **kwargs):
-        d = self.params_dict
-        d.update(kwargs)
-        self.params = json.dumps(d)
-
-    @property
-    def params_dict(self):
-        if self.params:
-            params = re.sub(",[ \t\r\n]+}", "}", self.params)
-            params = re.sub(",[ \t\r\n]+\]", "]", params)
-            return json.loads(params)
-        else:
-            return {}
+    # def override(self, obj):
+    #     """Overrides the plain fields of the dashboard."""
+    #     for field in obj.__class__.export_fields:
+    #         setattr(self, field, getattr(obj, field))
+    #
+    # def copy(self):
+    #     """Creates a copy of the dashboard without relationships."""
+    #     new_obj = self.__class__()
+    #     new_obj.override(self)
+    #     return new_obj
+    #
+    # def alter_params(self, **kwargs):
+    #     d = self.params_dict
+    #     d.update(kwargs)
+    #     self.params = json.dumps(d)
+    #
+    # @property
+    # def params_dict(self):
+    #     if self.params:
+    #         params = re.sub(",[ \t\r\n]+}", "}", self.params)
+    #         params = re.sub(",[ \t\r\n]+\]", "]", params)
+    #         return json.loads(params)
+    #     else:
+    #         return {}
 
     @classmethod
     def get_policy(cls, obj_type, obj_name, solution):
