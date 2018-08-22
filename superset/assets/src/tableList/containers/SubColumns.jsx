@@ -11,7 +11,7 @@ import * as actionCreators from '../actions';
 const _ = require('lodash');
 import '../style/table.scss';
 import intl from 'react-intl-universal';
-import {renderGlobalErrorMsg, loadIntlResources} from '../../../utils/utils';
+import {renderGlobalErrorMsg, loadIntlResources} from '../../utils/utils';
 
 class SubColumns extends Component {
     constructor(props) {

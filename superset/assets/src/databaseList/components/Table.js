@@ -9,19 +9,7 @@ import intl from 'react-intl-universal';
 import { ConnectionDelete, ConnectionEdit } from '../popup';
 import { isCorrectConnection } from '../utils';
 
-
-// import { getPermInfo } from '../../perm/actions';
-export function getPermInfo(object, callback) {
-    const url = `${winOri}/${object.type}/grant_info/${object.id}/`;
-    return fetch(url, {
-        credentials: "same-origin",
-        method: "GET"
-    }).then(always).then(json).then(
-        response => {
-            callbackHandler(response, callback);
-        }
-    );
-}
+import { getPermInfo } from '../../perm/actions';
 
 class SliceTable extends React.Component {
     constructor(props, context) {

@@ -1,0 +1,19 @@
+{% extends "superset/basic.html" %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css" href="{{ js_manifest('tableList' + '.css') }}" />
+{% endblock %}
+
+{% block body %}
+
+<div id="tableList"></div>
+
+{% endblock %}
+
+{% block tail_js %}
+{{super()}}
+{% with filename="tableList" %}
+{% include "superset/partials/_script_tag.html" %}
+{% endwith %}
+{% endblock %}

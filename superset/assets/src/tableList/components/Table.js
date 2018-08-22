@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 import { datasetTypes } from '../actions';
 import * as actions from '../actions';
 import { TableDelete } from '../popup';
-import * as utils from '../../../utils/utils';
+import * as utils from '../../utils/utils';
 import intl from 'react-intl-universal';
 import { getPermInfo } from '../../perm/actions';
 

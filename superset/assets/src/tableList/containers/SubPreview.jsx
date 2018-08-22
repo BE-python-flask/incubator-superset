@@ -10,7 +10,7 @@ import {Table, Select, Tooltip} from 'antd';
 import * as datasetModule from '../module';
 import {DetailType} from '../popup';
 import intl from 'react-intl-universal';
-import {renderAlertTip, renderGlobalErrorMsg, loadIntlResources} from '../../../utils/utils';
+import {renderAlertTip, renderGlobalErrorMsg, loadIntlResources} from '../../utils/utils';
 
 class SubPreview extends Component {
 

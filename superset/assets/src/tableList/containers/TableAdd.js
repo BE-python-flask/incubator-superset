@@ -4,7 +4,7 @@ import { HashRouter, Route, NavLink, Switch } from 'react-router-dom';
 import { connect, Provider } from 'react-redux';
 import { SubDetail, SubPreview, SubColumns, SubSqlMetric } from './';
 import '../style/tableAdd';
-import { loadIntlResources } from '../../../utils/utils';
+import { loadIntlResources } from '../../utils/utils';
 import intl from 'react-intl-universal';
 
 class TableAdd extends Component {

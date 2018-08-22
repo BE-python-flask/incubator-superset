@@ -16,3 +16,24 @@
     margin-right: 5px
     position: relative
     top: 3px
+
+@mixin tp-input-style()
+    width: 100%
+    padding: 10px
+    color: rgba(0, 0, 0, 0.65)
+    border: $borderStyleNormal
+    border-radius: $borderRadius
+    font-size: $smFontSize
+    &:focus
+        outline: none
+        border: $borderStyleFocus
+        border-radius: $borderRadius
+        box-shadow: $box-shadow
+
+@mixin tp-btn-style()
+    border-radius: $borderRadius
+    text-align: center
+    color: #fff
+    height: 34px
+    line-height: 34px
+    font-size: $lgFontSize
