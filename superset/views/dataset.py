@@ -21,14 +21,13 @@ from superset.models import (
 )
 from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
-from .base import (
-    SupersetModelView, PermissionManagement, catch_exception, json_response
-)
+from .base import PermissionManagement, catch_exception, json_response
+from .base import PilotModelView as UnionModelView
 
 config = app.config
 
 
-class TableColumnInlineView(SupersetModelView, PermissionManagement):  # noqa
+class TableColumnInlineView(UnionModelView, PermissionManagement):  # noqa
     model = TableColumn
     datamodel = SQLAInterface(TableColumn)
     route_base = '/tablecolumn'
@@ -92,7 +91,7 @@ class TableColumnInlineView(SupersetModelView, PermissionManagement):  # noqa
         self.model.check_name(obj.column_name)
 
 
-class SqlMetricInlineView(SupersetModelView, PermissionManagement):  # noqa
+class SqlMetricInlineView(UnionModelView, PermissionManagement):  # noqa
     model = SqlMetric
     datamodel = SQLAInterface(SqlMetric)
     route_base = '/sqlmetric'
@@ -154,7 +153,7 @@ class SqlMetricInlineView(SupersetModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_METRIC_EXPRESSION)
 
 
-class DatasetModelView(SupersetModelView, PermissionManagement):  # noqa
+class DatasetModelView(UnionModelView, PermissionManagement):  # noqa
     model = Dataset
     model_type = model.model_type
     datamodel = SQLAInterface(Dataset)
@@ -179,7 +178,7 @@ class DatasetModelView(SupersetModelView, PermissionManagement):  # noqa
     bool_columns = ['is_featured', 'filter_select_enabled']
     str_columns = ['database', 'created_on', 'changed_on']
 
-    #list_template = "superset/tableList.html"
+    list_template = "superset/tableList.html"
 
     @catch_exception
     @expose('/schemas/<database_id>/', methods=['GET', ])
@@ -607,7 +606,7 @@ class DatasetModelView(SupersetModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION)
 
 
-class HDFSTableModelView(SupersetModelView):
+class HDFSTableModelView(UnionModelView):
     route_base = '/hdfstable'
     model = HDFSTable
     datamodel = SQLAInterface(HDFSTable)

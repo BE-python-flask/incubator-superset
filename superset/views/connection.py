@@ -25,13 +25,13 @@ from superset.message import *
 from .base import (
     SupersetModelView, BaseSupersetView, PageMixin, catch_exception, json_response,
     PermissionManagement, DeleteMixin, YamlExportMixin,
-    SupersetModelView1, SupersetModelView2
+    SupersetModelView, PilotModelView
 )
 
 config = app.config
 
 
-class DatabaseView1(SupersetModelView1, DeleteMixin, YamlExportMixin):  # noqa
+class DatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
     datamodel = SQLAInterface(models.Database)
 
     list_title = _('List Databases')
@@ -101,7 +101,7 @@ class DatabaseView1(SupersetModelView1, DeleteMixin, YamlExportMixin):  # noqa
         DeleteMixin._delete(self, pk)
 
 
-class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
+class PilotDatabaseView(PilotModelView, PermissionManagement):  # noqa
     model = models.Database
     model_type = model.model_type
     datamodel = SQLAInterface(models.Database)
@@ -134,7 +134,7 @@ class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
     def pre_update(self, old_obj, new_obj):
         if old_obj.database_name == config.get('DEFAULT_INCEPTOR_CONN_NAME'):
             raise PermissionException(CANNOT_EDIT_DEFAULT_CONN)
-        super(DatabaseView2, self).pre_update(old_obj, new_obj)
+        super(PilotDatabaseView, self).pre_update(old_obj, new_obj)
 
     def check_column_values(self, obj):
         if not obj.database_name:
@@ -146,7 +146,7 @@ class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION_ARGS)
 
     def get_list_args(self, args):
-        kwargs = super(DatabaseView2, self).get_list_args(args)
+        kwargs = super(PilotDatabaseView, self).get_list_args(args)
         kwargs['database_type'] = args.get('database_type')
         return kwargs
 
@@ -331,7 +331,7 @@ class DatabaseView2(SupersetModelView2, PermissionManagement):  # noqa
         return json_response(data="")
 
 
-class HDFSConnectionModelView(SupersetModelView, PermissionManagement):
+class HDFSConnectionModelView(PilotModelView, PermissionManagement):
     model = models.HDFSConnection
     model_type = model.model_type
     datamodel = SQLAInterface(models.HDFSConnection)
@@ -567,7 +567,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
                     "Error parameter ids: {ids}, queried {num} connection(s)")
                                          .format(ids=db_ids, num=len(objs))
                                          )
-            db_view = DatabaseView2()
+            db_view = PilotDatabaseView()
             for id in db_ids:
                 db_view.delete(id)
         #
@@ -778,7 +778,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
         }
 
 
-class DatabaseAsync(DatabaseView1):
+class DatabaseAsync(DatabaseView):
     list_columns = [
         'id', 'database_name',
         'expose_in_sqllab', 'allow_ctas', 'force_ctas_schema',
@@ -833,5 +833,5 @@ class CsvToDatabaseView(SimpleFormView):
         return redirect('/tablemodelview/list/')
 
 
-class DatabaseTablesAsync(DatabaseView1):
+class DatabaseTablesAsync(DatabaseView):
     list_columns = ['id', 'all_table_names', 'all_schema_names']

@@ -11,7 +11,7 @@ from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 
-from superset import sql_lab
+from superset import sql_lab, appbuilder
 from superset.models import Database, Query, SavedQuery
 from .base import SupersetModelView, BaseSupersetView, DeleteMixin, catch_exception, json_response
 
@@ -26,6 +26,15 @@ class QueryView(SupersetModelView):
         'start_time': _('Start Time'),
         'end_time': _('End Time'),
     }
+
+
+# appbuilder.add_view(
+#     QueryView,
+#     'Queries',
+#     label=__('Queries'),
+#     category='Manage',
+#     category_label=__('Manage'),
+#     icon='fa-search')
 
 
 class SavedQueryView(SupersetModelView, DeleteMixin):
@@ -70,7 +79,17 @@ class SavedQueryViewApi(SavedQueryView):
     edit_columns = add_columns
 
 
-class SQLLab(BaseSupersetView):
+# appbuilder.add_view_no_menu(SavedQueryViewApi)
+# appbuilder.add_view_no_menu(SavedQueryView)
+#
+# appbuilder.add_link(
+#     __('Saved Queries'),
+#     href='/sqllab/my_queries/',
+#     icon='fa-save',
+#     category='SQL Lab')
+
+
+class SqlLab(BaseSupersetView):
 
     @expose('/my_queries/')
     def my_queries(self):
@@ -120,3 +139,5 @@ class SQLLab(BaseSupersetView):
                                   columns=[column_name, ])
         payload = sql_lab.execute_sql(database_id, sql, schema=schema)
         return json_response(data=payload)
+
+# appbuilder.add_view_no_menu(SqlLab)

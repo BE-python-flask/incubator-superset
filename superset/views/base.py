@@ -431,12 +431,12 @@ class PageMixin(object):
         return kwargs
 
 
-class SupersetModelView1(ModelView):
+class SupersetModelView(ModelView):
     page_size = 100
     list_widget = SupersetListWidget
 
 
-class SupersetModelView2(BaseSupersetView, ModelView, PageMixin, PermissionManagement):
+class PilotModelView(BaseSupersetView, ModelView, PageMixin, PermissionManagement):
     page_size = 100
     list_widget = SupersetListWidget
     model = models.Model
@@ -447,11 +447,11 @@ class SupersetModelView2(BaseSupersetView, ModelView, PageMixin, PermissionManag
     str_columns = []
 
     def __init__(self):
-        super(SupersetModelView2, self).__init__()
+        super(PilotModelView, self).__init__()
         self.guardian_auth = conf.get(GUARDIAN_AUTH, False)
 
     def get_list_args(self, args):
-        kwargs = super(SupersetModelView, self).get_list_args(args)
+        kwargs = super(PilotModelView, self).get_list_args(args)
         kwargs['dataset_type'] = args.get('dataset_type')
         kwargs['dataset_id'] = int(args.get('dataset_id')) \
             if args.get('dataset_id') else None
@@ -734,14 +734,6 @@ class SupersetModelView2(BaseSupersetView, ModelView, PageMixin, PermissionManag
             raise PermissionException(_('Can not edit a online object'))
         else:
             return online
-
-
-if config.get('USE_OPEN_SUPERSET'):
-    class SupersetModelView(SupersetModelView1):
-        pass
-else:
-    class SupersetModelView(SupersetModelView2):
-        pass
 
 
 class ListWidgetWithCheckboxes(ListWidget):
