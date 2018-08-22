@@ -129,6 +129,10 @@ class TableColumn(Model, BaseColumn):
         return col
 
     @property
+    def table(self):
+        return self.ref_dataset
+
+    @property
     def datasource(self):
         return self.table
 

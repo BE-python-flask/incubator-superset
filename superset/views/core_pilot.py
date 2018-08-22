@@ -647,7 +647,7 @@ class Superset(BaseSupersetView, PermissionManagement):
 
     @expose("/explore_json/<datasource_type>/<datasource_id>/")
     @expose('/explore_json/', methods=['GET', 'POST'])
-    def explore_json(self, datasource_type, datasource_id):
+    def explore_json(self, datasource_type=None, datasource_id=None):
         """render the chart of slice"""
         try:
             csv = request.args.get('csv') == 'true'
@@ -716,7 +716,7 @@ class Superset(BaseSupersetView, PermissionManagement):
 
     @expose("/explore/<datasource_type>/<datasource_id>/")
     @expose('/explore/', methods=['GET', 'POST'])
-    def explore(self, datasource_type, datasource_id):
+    def explore(self, datasource_type=None, datasource_id=None):
         """render the parameters of slice"""
         user_id = g.user.get_id() if g.user else None
         form_data, slc = self.get_form_data()
@@ -944,7 +944,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         response = {
             'can_add': slice_add_perm,
             'can_download': slice_download_perm,
-            'can_overwrite': is_owner(slc, g.user),
+            'can_overwrite': slice_overwrite_perm,
             'form_data': slc.form_data,
             'slice': slc.data,
         }
@@ -1146,53 +1146,21 @@ class Superset(BaseSupersetView, PermissionManagement):
     @expose("/testconn/", methods=["POST", "GET"])
     def testconn(self):
         """Tests a sqla connection"""
+        args = json.loads(str(request.data, encoding='utf-8'))
+        uri = args.get('sqlalchemy_uri')
+        db_name = args.get('database_name')
+        if db_name:
+            database = (
+                db.session.query(Database).filter_by(database_name=db_name).first()
+            )
+            if database and uri == database.safe_sqlalchemy_uri():
+                uri = database.sqlalchemy_uri_decrypted
+        connect_args = eval(args.get('args', {})).get('connect_args', {})
+        connect_args = Database.append_args(connect_args)
+        engine = create_engine(uri, connect_args=connect_args)
         try:
-            username = g.user.username if g.user is not None else None
-            uri = request.json.get('uri')
-            db_name = request.json.get('name')
-            impersonate_user = request.json.get('impersonate_user')
-            database = None
-            if db_name:
-                database = (
-                    db.session
-                        .query(Database)
-                        .filter_by(database_name=db_name)
-                        .first()
-                )
-                if database and uri == database.safe_sqlalchemy_uri():
-                    # the password-masked uri was passed
-                    # use the URI associated with this database
-                    uri = database.sqlalchemy_uri_decrypted
-
-            configuration = {}
-
-            if database and uri:
-                url = make_url(uri)
-                db_engine = Database.get_db_engine_spec_for_backend(
-                    url.get_backend_name())
-                db_engine.patch()
-
-                masked_url = database.get_password_masked_url_from_uri(uri)
-                logging.info('Superset.testconn(). Masked URL: {0}'.format(masked_url))
-
-                configuration.update(
-                    db_engine.get_configuration_for_impersonation(
-                        uri, impersonate_user, username),
-                )
-
-            connect_args = (
-                request.json
-                    .get('extras', {})
-                    .get('engine_params', {})
-                    .get('connect_args', {}))
-
-            if configuration:
-                connect_args['configuration'] = configuration
-
-            connect_args = Database.append_args(connect_args)
-            engine = create_engine(uri, connect_args=connect_args)
             tables = engine.table_names()
-            return json_success(json.dumps(tables, indent=4))
+            return json_response(data=tables)
         except Exception as e:
             raise DatabaseException(str(e))
 

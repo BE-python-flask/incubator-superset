@@ -37,7 +37,8 @@ import simplejson as json
 from six import string_types, text_type
 from six.moves import cPickle as pkl, reduce
 
-from superset import app, cache, get_manifest_file, utils
+from superset import app, get_manifest_file, utils
+from superset import simple_cache as cache
 from superset.exceptions import NullValueException
 from superset.utils import DTTM_ALIAS, JS_MAX_INTEGER, merge_extra_filters
 
