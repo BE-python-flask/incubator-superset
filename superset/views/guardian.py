@@ -1,3 +1,4 @@
+"""Guardian view for Pilot"""
 import functools
 from flask import request, g
 from flask_babel import lazy_gettext as _

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=C,R,W
+"""A collection of ORM sqlalchemy models for Pilot"""
 import re
 import random
 import string
@@ -20,19 +23,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import make_transient
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import table, literal_column, text, column
-from sqlalchemy.sql.expression import ColumnClause, TextAsFrom
+from sqlalchemy.sql.expression import TextAsFrom
 
 from superset import db, app, utils, security_manager
 from superset.utils import DTTM_ALIAS
 from superset.exceptions import (
-    ParameterException, PropertyException, DatabaseException, PermissionException,
-    HDFSException
+    PropertyException, DatabaseException, PermissionException, HDFSException
 )
 from superset.jinja_context import get_template_processor
 from .annotations import Annotation
-from .base import AuditMixinNullable, ImportMixin, Queryable, QueryResult, QueryStatus
+from .base import AuditMixinNullable, ImportMixin, QueryResult, QueryStatus
 from .connection import Database, HDFSConnection
 from .datasource_base import BaseColumn, BaseMetric, BaseDatasource
 

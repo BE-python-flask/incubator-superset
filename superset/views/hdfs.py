@@ -1,3 +1,4 @@
+"""HDFS view for Pilot"""
 import logging
 import json
 import functools

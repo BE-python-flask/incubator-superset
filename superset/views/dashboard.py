@@ -1,16 +1,19 @@
+"""Dashboard views for Pilot"""
 import json
 import pickle
 import re
 import time
 from datetime import datetime
-from flask import g, request, Response
+from flask import g, request, Response, redirect
+from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
+from flask_appbuilder.actions import action
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.sqla.models import User
 from sqlalchemy import and_, or_
 
-from superset import app, db, utils
+from superset import app, db, utils, security_manager, models
 from superset.exceptions import ParameterException, GuardianException
 from superset.models import (
     Database, Dataset, Slice, Dashboard, Log, FavStar, str_to_model, model_name_columns
@@ -18,7 +21,8 @@ from superset.models import (
 from superset.message import *
 from .base import (
     SupersetModelView, PermissionManagement, catch_exception, json_response,
-    check_ownership
+    check_ownership, PilotModelView, DeleteMixin, SupersetFilter,
+    generate_download_headers
 )
 
 
@@ -26,26 +30,124 @@ config = app.config
 QueryStatus = utils.QueryStatus
 
 
-class DashboardModelView(SupersetModelView, PermissionManagement):
+class DashboardFilter(SupersetFilter):
+
+    """List dashboards for which users have access to at least one slice or are owners"""
+
+    def apply(self, query, func):  # noqa
+        if self.has_all_datasource_access():
+            return query
+        Slice = models.Slice  # noqa
+        Dash = models.Dashboard  # noqa
+        User = security_manager.user_model
+        # TODO(bogdan): add `schema_access` support here
+        datasource_perms = self.get_view_menus('datasource_access')
+        slice_ids_qry = (
+            db.session
+                .query(Slice.id)
+                .filter(Slice.perm.in_(datasource_perms))
+        )
+        owner_ids_qry = (
+            db.session
+                .query(Dash.id)
+                .join(Dash.owners)
+                .filter(User.id == User.get_user_id())
+        )
+        query = query.filter(
+            or_(Dash.id.in_(
+                db.session.query(Dash.id)
+                    .distinct()
+                    .join(Dash.slices)
+                    .filter(Slice.id.in_(slice_ids_qry)),
+                    ), Dash.id.in_(owner_ids_qry)),
+        )
+        return query
+
+
+class SupersetDashboardModelView(SupersetModelView, DeleteMixin):  # noqa
+    datamodel = SQLAInterface(Dashboard)
+
+    list_title = _('List Dashboards')
+    show_title = _('Show Dashboard')
+    add_title = _('Add Dashboard')
+    edit_title = _('Edit Dashboard')
+
+    list_columns = ['dashboard_link', 'creator', 'modified']
+    order_columns = ['modified']
+    edit_columns = [
+        'name', 'slug', 'owners', 'position_json', 'css',
+        'json_metadata']
+    show_columns = edit_columns + ['table_names', 'slices']
+    search_columns = ('name', 'slug', 'owners')
+    add_columns = edit_columns
+    base_order = ('changed_on', 'desc')
+    base_filters = [['slice', DashboardFilter, lambda: []]]
+    label_columns = {
+        'dashboard_link': _('Dashboard'),
+        'name': _('Title'),
+        'slug': _('Slug'),
+        'slices': _('Charts'),
+        'owners': _('Owners'),
+        'creator': _('Creator'),
+        'modified': _('Modified'),
+        'position_json': _('Position JSON'),
+        'css': _('CSS'),
+        'json_metadata': _('JSON Metadata'),
+        'table_names': _('Underlying Tables'),
+    }
+
+    def pre_add(self, obj):
+        obj.slug = obj.slug.strip() or None
+        if obj.slug:
+            obj.slug = obj.slug.replace(' ', '-')
+            obj.slug = re.sub(r'[^\w\-]+', '', obj.slug)
+        if g.user not in obj.owners:
+            obj.owners.append(g.user)
+        utils.validate_json(obj.json_metadata)
+        utils.validate_json(obj.position_json)
+        owners = [o for o in obj.owners]
+        for slc in obj.slices:
+            slc.owners = list(set(owners) | set(slc.owners))
+
+    def pre_update(self, obj):
+        check_ownership(obj)
+        self.pre_add(obj)
+
+    def pre_delete(self, obj):
+        check_ownership(obj)
+
+    @action('mulexport', __('Export'), __('Export dashboards?'), 'fa-database')
+    def mulexport(self, items):
+        if not isinstance(items, list):
+            items = [items]
+        ids = ''.join('&id={}'.format(d.id) for d in items)
+        return redirect(
+            '/dashboardmodelview/export_dashboards_form?{}'.format(ids[1:]))
+
+    @expose('/export_dashboards_form')
+    def download_dashboards(self):
+        if request.args.get('action') == 'go':
+            ids = request.args.getlist('id')
+            return Response(
+                Dashboard.export_dashboards(ids),
+                headers=generate_download_headers('json'),
+                mimetype='application/text')
+        return self.render_template(
+            'superset/export_dashboards.html',
+            dashboards_url='/dashboardmodelview/list',
+        )
+
+
+class DashboardModelView(PilotModelView, PermissionManagement):
     model = Dashboard
     model_type = model.model_type
     datamodel = SQLAInterface(Dashboard)
     route_base = '/dashboard'
-
-    if config.get('USE_OPEN_SUPERSET'):
-        list_columns = ['name', 'creator', 'modified']
-        order_columns = ['modified']
-        edit_columns = ['name', 'slug', 'owners', 'position_json', 'css', 'json_metadata']
-        show_columns = edit_columns + ['table_names', 'slices']
-        search_columns = ('name', 'slug', 'owners')
-        add_columns = edit_columns
-        base_order = ('changed_on', 'desc')
-    else:
-        list_columns = ['id', 'name', 'url', 'description', 'changed_on']
-        edit_columns = ['name', 'description']
-        show_columns = ['id', 'name', 'description']
-        add_columns = edit_columns
-        list_template = "superset/partials/dashboard/dashboard.html"
+    list_columns = ['id', 'name', 'url', 'description', 'changed_on']
+    edit_columns = ['name', 'description']
+    show_columns = ['id', 'name', 'description']
+    add_columns = edit_columns
+    list_template = "superset/dashboardList.html"
 
     str_to_column = {
         'title': Dashboard.name,
@@ -58,43 +160,22 @@ class DashboardModelView(SupersetModelView, PermissionManagement):
     bool_columns = ['online']
     str_columns = ['created_on', 'changed_on']
 
-    if config.get('USE_OPEN_SUPERSET'):
-        def pre_add(self, obj):
-            obj.slug = obj.slug.strip() or None
-            if obj.slug:
-                obj.slug = obj.slug.replace(' ', '-')
-                obj.slug = re.sub(r'[^\w\-]+', '', obj.slug)
-            if g.user not in obj.owners:
-                obj.owners.append(g.user)
-            utils.validate_json(obj.json_metadata)
-            utils.validate_json(obj.position_json)
-            owners = [o for o in obj.owners]
-            for slc in obj.slices:
-                slc.owners = list(set(owners) | set(slc.owners))
+    def pre_add(self, obj):
+        self.check_column_values(obj)
+        utils.validate_json(obj.json_metadata)
+        utils.validate_json(obj.position_json)
 
-        def pre_update(self, obj):
-            check_ownership(obj)
-            self.pre_add(obj)
+    def pre_update(self, old_obj, new_obj):
+        self.check_edit_perm(old_obj.guardian_datasource())
+        self.pre_add(new_obj)
 
-        def pre_delete(self, obj):
-            check_ownership(obj)
-    else:
-        def pre_add(self, obj):
-            self.check_column_values(obj)
-            utils.validate_json(obj.json_metadata)
-            utils.validate_json(obj.position_json)
-
-        def pre_update(self, old_obj, new_obj):
-            self.check_edit_perm(old_obj.guardian_datasource())
-            self.pre_add(new_obj)
-
-        def post_delete(self, obj):
-            super(DashboardModelView, self).post_delete(obj)
-            db.session.query(FavStar) \
-                .filter(FavStar.class_name.ilike(self.model_type),
-                        FavStar.obj_id == obj.id) \
-                .delete(synchronize_session=False)
-            db.session.commit()
+    def post_delete(self, obj):
+        super(DashboardModelView, self).post_delete(obj)
+        db.session.query(FavStar) \
+            .filter(FavStar.class_name.ilike(self.model_type),
+                    FavStar.obj_id == obj.id) \
+            .delete(synchronize_session=False)
+        db.session.commit()
 
     def check_column_values(self, obj):
         if not obj.name:

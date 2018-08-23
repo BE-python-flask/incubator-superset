@@ -1,3 +1,4 @@
+"""User views for Pilot"""
 from flask import g
 from flask_appbuilder import expose
 from superset.exceptions import SupersetException2

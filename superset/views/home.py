@@ -1,3 +1,4 @@
+"""Home view for Pilot"""
 from datetime import timedelta, date
 import logging
 import json

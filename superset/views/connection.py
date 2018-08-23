@@ -1,3 +1,4 @@
+"""Connection views for Pilot"""
 import json
 import os
 import requests
@@ -23,7 +24,7 @@ from superset.exceptions import ParameterException, PermissionException
 from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
 from .base import (
-    SupersetModelView, BaseSupersetView, PageMixin, catch_exception, json_response,
+    BaseSupersetView, PageMixin, catch_exception, json_response,
     PermissionManagement, DeleteMixin, YamlExportMixin,
     SupersetModelView, PilotModelView
 )
@@ -31,7 +32,7 @@ from .base import (
 config = app.config
 
 
-class DatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
+class SupersetDatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
     datamodel = SQLAInterface(models.Database)
 
     list_title = _('List Databases')
@@ -72,7 +73,7 @@ class DatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
     edit_template = 'superset/models/database/edit.html'
     base_order = ('changed_on', 'desc')
     label_columns = {
-        'expose_in_sqllab': _('Expose in SQL Lab'),
+        'expose': _('Expose in SQL Lab'),
         'allow_ctas': _('Allow CREATE TABLE AS'),
         'allow_dml': _('Allow DML'),
         'force_ctas_schema': _('CTAS Schema'),
@@ -101,7 +102,7 @@ class DatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
         DeleteMixin._delete(self, pk)
 
 
-class PilotDatabaseView(PilotModelView, PermissionManagement):  # noqa
+class DatabaseView(PilotModelView, PermissionManagement):  # noqa
     model = models.Database
     model_type = model.model_type
     datamodel = SQLAInterface(models.Database)
@@ -781,7 +782,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
 class DatabaseAsync(DatabaseView):
     list_columns = [
         'id', 'database_name',
-        'expose_in_sqllab', 'allow_ctas', 'force_ctas_schema',
+        'expose', 'allow_ctas', 'force_ctas_schema',
         'allow_run_async', 'allow_run_sync', 'allow_dml',
         'allow_multi_schema_metadata_fetch',
     ]

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=C,R,W
+"""A collection of ORM sqlalchemy models for Pilot"""
 from copy import copy, deepcopy
 import os
 import json
