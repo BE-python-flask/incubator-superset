@@ -11,7 +11,7 @@ import * as actionCreators from '../actions';
 const _ = require('lodash');
 import '../style/table.scss';
 import intl from 'react-intl-universal';
-import {loadIntlResources, renderGlobalErrorMsg} from '../../../utils/utils';
+import {loadIntlResources, renderGlobalErrorMsg} from '../../utils/utils';
 import {getMetricTypeOptions} from '../module';
 
 class SubSqlMetric extends Component {

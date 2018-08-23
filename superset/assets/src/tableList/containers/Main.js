@@ -5,7 +5,7 @@ import { fetchIfNeeded, invalidateCondition, saveDatasetId, clearDatasetData } f
 import { Pagination, Table, Operate } from '../components';
 import PropTypes from 'prop-types';
 import intl from 'react-intl-universal';
-import { renderAlertTip, loadIntlResources } from '../../../utils/utils';
+import { renderAlertTip, loadIntlResources } from '../../utils/utils';
 
 class App extends Component {
     constructor(props) {

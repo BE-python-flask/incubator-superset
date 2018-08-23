@@ -5,7 +5,7 @@ import { navigateTo, changePageSize} from '../actions';
 import { Pagination, LocaleProvider } from 'antd';
 import enUS from 'antd/lib/locale-provider/en_US';
 import zhCN from 'antd/lib/locale-provider/zh_CN';
-import { getAntdLocale } from '../../../utils/utils';
+import { getAntdLocale } from '../../utils/utils';
 
 class SlicePagination extends React.Component {
   constructor(props) {

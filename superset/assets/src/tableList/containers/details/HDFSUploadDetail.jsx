@@ -8,7 +8,7 @@ import {Select, Tooltip, TreeSelect} from 'antd';
 import {Confirm, CreateHDFSConnect, CreateInceptorConnect} from '../../popup';
 import {datasetTypes} from '../../actions';
 import * as module from '../../module';
-import * as utils from '../../../../utils/utils';
+import * as utils from '../../../utils/utils';
 import intl from 'react-intl-universal';
 import {ConfirmModal} from '../../../common/components';
 

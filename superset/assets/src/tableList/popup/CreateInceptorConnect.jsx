@@ -4,7 +4,7 @@ import { render } from 'react-dom';
 import { fetchInceptorConnectAdd, testConnection } from '../../databaseList/actions';
 import { Select, Alert, Tooltip } from 'antd';
 import PropTypes from 'prop-types';
-import { getDatabaseDefaultParams } from '../../../utils/utils';
+import { getDatabaseDefaultParams } from '../../utils/utils';
 
 const defaultParams = getDatabaseDefaultParams();
 

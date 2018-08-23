@@ -9,8 +9,8 @@ import {Select, Tooltip, TreeSelect, message} from 'antd';
 import {Confirm, CreateHDFSConnect, CreateInceptorConnect} from '../../popup';
 import {fetchSchemaList, datasetTypes} from '../../actions';
 import {constructInceptorDataset, initDatasetData, extractOpeType, getDatasetId, extractDatasetType} from '../../module';
-import {appendTreeData, constructTreeData} from '../../../../utils/common2';
-import {renderLoadingModal, renderAlertTip, renderGlobalErrorMsg, fetchDatabaseList,PILOT_PREFIX,loadIntlResources} from '../../../../utils/utils';
+import {appendTreeData, constructTreeData} from '../../../utils/common';
+import {renderLoadingModal, renderAlertTip, renderGlobalErrorMsg, fetchDatabaseList,PILOT_PREFIX,loadIntlResources} from '../../../utils/utils';
 import intl from 'react-intl-universal';
 
 const $ = window.$ = require('jquery');

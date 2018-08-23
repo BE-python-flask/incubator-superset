@@ -7,7 +7,7 @@ import PropTypes from 'prop-types';
 import * as actions from '../actions';
 import {TableDelete} from '../popup';
 import intl from 'react-intl-universal';
-import {renderGlobalErrorMsg} from '../../../utils/utils';
+import {renderGlobalErrorMsg} from '../../utils/utils';
 
 class SliceOperate extends React.Component {
     constructor(props) {
