@@ -67,15 +67,17 @@ class TableColumnInlineView(UnionModelView, PermissionManagement):  # noqa
 
     def pre_add(self, column):
         self.check_column_values(column)
+        dataset = Dataset.get_object(id=column.dataset_id)
+        self.check_edit_perm(dataset.guardian_datasource())
 
-    def post_add(self, metric):
+    def post_add(self, column):
         pass
 
     def pre_update(self, old_column, new_column):
         if not new_column.dataset:
             raise PropertyException('Column [{}] misses dataset'.format(new_column))
+        self.check_column_values(new_column)
         self.check_edit_perm(new_column.dataset.guardian_datasource())
-        self.pre_add(new_column)
 
     def post_update(self, old_column, new_column):
         pass
@@ -127,6 +129,8 @@ class SqlMetricInlineView(UnionModelView, PermissionManagement):  # noqa
 
     def pre_add(self, metric):
         self.check_column_values(metric)
+        dataset = Dataset.get_object(id=metric.dataset_id)
+        self.check_edit_perm(dataset.guardian_datasource())
 
     def post_add(self, metric):
         pass
@@ -134,8 +138,8 @@ class SqlMetricInlineView(UnionModelView, PermissionManagement):  # noqa
     def pre_update(self, old_metric, new_metric):
         if not new_metric.dataset:
             raise PropertyException('Metric [{}] misses dataset'.format(new_metric))
+        self.check_column_values(new_metric)
         self.check_edit_perm(new_metric.dataset.guardian_datasource())
-        self.pre_add(new_metric)
 
     def post_update(self, old_metric, new_metric):
         pass
