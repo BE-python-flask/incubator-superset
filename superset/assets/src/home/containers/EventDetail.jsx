@@ -86,7 +86,7 @@ class EventDetail extends Component {
             title: intl.get('action'),
             dataIndex: 'action',
             key: 'action',
-            sorter: true,
+            sorter: (a, b) => a.action.localeCompare(b.action),
             width: '43%',
             render: (text, record) => {
                         const classes = "icon action-title-icon " + record.type + "-icon";
@@ -107,7 +107,7 @@ class EventDetail extends Component {
             title: intl.get('edit_time'),
             dataIndex: 'time',
             key: 'time',
-            sorter: true,
+            sorter: (a, b) => { return a.time > b.time　? 1 : -1;},
             width: '33%',
             className: 'time-col',
             render: (text) => (<span>{text}</span>)

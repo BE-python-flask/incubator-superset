@@ -74,6 +74,7 @@
     "fastdom": "^1.0.6",
     "geojson-extent": "^0.3.2",
     "geolib": "^2.0.24",
+    "has-symbols": "^1.0.0",
     "immutable": "^3.8.2",
     "invariant": "^2.2.4",
     "is-electron": "^2.1.0",
