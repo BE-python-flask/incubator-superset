@@ -14,7 +14,10 @@
         {% for lang in languages %}
             {% if lang != locale %}
                 <a tabindex="-1" href="{{appbuilder.get_url_for_locale(lang)}}">
-                  <div class="f16">
+                  <div
+                    class="lan-switcher"
+                    name={{languages[lang].get('value')}}
+                  >
                     <i class="flag {{languages[lang].get('flag')}}"></i> - {{languages[lang].get('name')}}
                   </div>
                 </a>
@@ -24,8 +27,6 @@
     </ul>
 </li>
 {% endif %}
-
-
 
 {% if not current_user.is_anonymous() %}
     <li class="dropdown">
@@ -46,3 +47,10 @@
     <li><a href="{{appbuilder.get_url_for_login}}">
     <i class="fa fa-fw fa-sign-in"></i>{{_("Login")}}</a></li>
 {% endif %}
+
+<script type="text/javascript">
+    document.querySelector('.lan-switcher').addEventListener('click', function(e) {
+        var lan = this.getAttribute('name');
+        localStorage.setItem('pilot:currentLocale', lan);
+    }, false);
+</script>
