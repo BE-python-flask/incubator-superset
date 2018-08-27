@@ -3,9 +3,82 @@
     "show": true,
     "version": "v1"
   },
+
+  "_security": "",
+  "security": {
+    "show": true,
+    "version": "v1"
+  },
   "security_listUsers": {
     "show": true,
     "version": "v1"
   },
-  "security_listRoles": {}
+  "security_listRoles": {
+    "show": true,
+    "version": "v1"
+  },
+
+  "dashboard": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot",
+    "_path": "superset"
+  },
+
+  "slice": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot",
+    "_path": "superset"
+  },
+
+  "_source": {},
+  "source": {
+    "show": true,
+    "version": "v1"
+  },
+
+  "database_list": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot"
+  },
+  "table_list": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot"
+  },
+  "upload_a_CSV": {
+    "show": true,
+    "version": "v1",
+    "_path": "pilot"
+  },
+
+  "_sql_lab": {},
+  "sql_lab": {
+    "show": true,
+    "version": "v1"
+  },
+  "sql_editer": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot"
+  },
+  "query_search": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot"
+  },
+  "saved_queries": {
+    "show": true,
+    "version": "v1",
+    "path": "pilot"
+  },
+
+  "_hdfs": {},
+  "hdfs": {
+    "show": true,
+    "version": "v1"
+  }
+
 }
