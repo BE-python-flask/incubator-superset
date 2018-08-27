@@ -1,4 +1,6 @@
-"""A collection of ORM sqlalchemy models for Superset"""
+# -*- coding: utf-8 -*-
+# pylint: disable=C,R,W
+"""A collection of ORM sqlalchemy models for Pilot"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function

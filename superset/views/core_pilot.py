@@ -1,3 +1,4 @@
+"""Views for Pilot"""
 import json
 import logging
 import pandas as pd
@@ -2158,12 +2159,13 @@ class Superset(BaseSupersetView, PermissionManagement):
     def sqllab(self):
         """SQL Editor"""
         d = {
-            'defaultDbId': None,
+            'defaultDbId': config.get('SQLLAB_DEFAULT_DBID'),
+            'common': self.common_bootsrap_payload(),
         }
-        self.update_redirect()
         return self.render_template(
-            'superset/sqllab.html',
-            bootstrap_data=json.dumps(d, default=utils.json_iso_dttm_ser)
+            'superset/basic.html',
+            entry='sqllab',
+            bootstrap_data=json.dumps(d, default=utils.json_iso_dttm_ser),
         )
 
     @expose('/slice_query/<slice_id>/')
