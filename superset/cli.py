@@ -16,7 +16,7 @@ from sys import stdout
 import werkzeug.serving
 import yaml
 
-from superset import app, db, data, security, dict_import_export_util, utils
+from superset import app, db, data, security_manager, dict_import_export_util, utils
 from superset import security_manager as sm
 from superset.models import HDFSConnection, Log, Database
 
@@ -31,7 +31,8 @@ manager.add_command('db', MigrateCommand)
 @manager.command
 def init():
     """Inits the application"""
-    security.sync_role_definitions()
+    utils.get_or_create_main_db()
+    security_manager.sync_role_definitions()
 
 
 def init_tables_and_roles():

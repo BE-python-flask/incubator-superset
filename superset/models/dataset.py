@@ -281,6 +281,8 @@ class Dataset(Model, BaseDatasource):
     __tablename__ = 'dataset'
     model_type = 'dataset'
     query_language = 'sql'
+    metric_class = SqlMetric
+    column_class = TableColumn
     guardian_type = model_type.upper()
 
     dataset_name = Column(String(128), nullable=False, unique=True)
@@ -988,7 +990,7 @@ class Dataset(Model, BaseDatasource):
             metrics += dbcol.get_metrics().values()
 
         metrics.append(SqlMetric(
-            metric_name='count(*)',
+            metric_name='count',
             metric_type='count',
             expression="COUNT(*)"
         ))

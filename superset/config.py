@@ -12,6 +12,7 @@ from __future__ import unicode_literals
 import imp
 import json
 import os
+import sys
 
 from flask_appbuilder.security.manager import AUTH_DB
 from superset.stats_logger import DummyStatsLogger
@@ -281,17 +282,16 @@ ROBOT_PERMISSION_ROLES = ['Public', 'Gamma', 'Alpha', 'Admin', 'sql_lab']
 
 CONFIG_PATH_ENV_VAR = 'PILOT_CONFIG_PATH'
 
-try:
-    if CONFIG_PATH_ENV_VAR in os.environ:
-        # Explicitly import config module that is not in pythonpath; useful
-        # for case where app is being executed via pex.
-        imp.load_source('pilot_config', os.environ[CONFIG_PATH_ENV_VAR])
+# If a callable is specified, it will be called at app startup while passing
+# a reference to the Flask app. This can be used to alter the Flask app
+# in whatever way.
+# example: FLASK_APP_MUTATOR = lambda x: x.before_request = f
+FLASK_APP_MUTATOR = None
 
-    from pilot_config import *  # noqa
-    import pilot_config
-    print('Loaded your LOCAL configuration at [{}]'.format(pilot_config.__file__))
-except ImportError:
-    pass
+# Set this to false if you don't want users to be able to request/grant
+# datasource access requests from/to other users.
+ENABLE_ACCESS_REQUEST = False
+
 
 # smtp server configuration
 EMAIL_NOTIFICATIONS = False  # all the emails are sent using dryrun
@@ -306,4 +306,88 @@ SMTP_MAIL_FROM = 'pilot@pilot.com'
 if not CACHE_DEFAULT_TIMEOUT:
     CACHE_DEFAULT_TIMEOUT = CACHE_CONFIG.get('CACHE_DEFAULT_TIMEOUT')
 
-USE_OPEN_SUPERSET = True
+# Whether to bump the logging level to ERRROR on the flask_appbiulder package
+# Set to False if/when debugging FAB related issues like
+# permission management
+SILENCE_FAB = True
+
+# The link to a page containing common errors and their resolutions
+# It will be appended at the bottom of sql_lab errors.
+TROUBLESHOOTING_LINK = ''
+
+# CSRF token timeout, set to None for a token that never expires
+WTF_CSRF_TIME_LIMIT = 60 * 60 * 24 * 7
+
+# This link should lead to a page with instructions on how to gain access to a
+# Datasource. It will be placed at the bottom of permissions errors.
+PERMISSION_INSTRUCTIONS_LINK = ''
+
+# Integrate external Blueprints to the app by passing them to your
+# configuration. These blueprints will get integrated in the app
+BLUEPRINTS = []
+
+# Provide a callable that receives a tracking_url and returns another
+# URL. This is used to translate internal Hadoop job tracker URL
+# into a proxied one
+TRACKING_URL_TRANSFORMER = lambda x: x  # noqa: E731
+
+# Interval between consecutive polls when using Hive Engine
+HIVE_POLL_INTERVAL = 5
+
+# Allow for javascript controls components
+# this enables programmers to customize certain charts (like the
+# geospatial ones) by inputing javascript in controls. This exposes
+# an XSS security vulnerability
+ENABLE_JAVASCRIPT_CONTROLS = False
+
+# A callable that allows altering the database conneciton URL and params
+# on the fly, at runtime. This allows for things like impersonation or
+# arbitrary logic. For instance you can wire different users to
+# use different connection parameters, or pass their email address as the
+# username. The function receives the connection uri object, connection
+# params, the username, and returns the mutated uri and params objects.
+# Example:
+#   def DB_CONNECTION_MUTATOR(uri, params, username, security_manager):
+#       user = security_manager.find_user(username=username)
+#       if user and user.email:
+#           uri.username = user.email
+#       return uri, params
+#
+# Note that the returned uri and params are passed directly to sqlalchemy's
+# as such `create_engine(url, **params)`
+DB_CONNECTION_MUTATOR = None
+
+# A function that intercepts the SQL to be executed and can alter it.
+# The use case is can be around adding some sort of comment header
+# with information such as the username and worker node information
+#
+#    def SQL_QUERY_MUTATOR(sql, username, security_manager):
+#        dttm = datetime.now().isoformat()
+#        return "-- [SQL LAB] {username} {dttm}\n sql"(**locals())
+SQL_QUERY_MUTATOR = None
+
+# When not using gunicorn, (nginx for instance), you may want to disable
+# using flask-compress
+ENABLE_FLASK_COMPRESS = True
+
+
+try:
+    if CONFIG_PATH_ENV_VAR in os.environ:
+        # Explicitly import config module that is not in pythonpath; useful
+        # for case where app is being executed via pex.
+        print('Loaded your LOCAL configuration at [{}]'.format(
+            os.environ[CONFIG_PATH_ENV_VAR]))
+        module = sys.modules[__name__]
+        override_conf = imp.load_source(
+            'pilot_config',
+            os.environ[CONFIG_PATH_ENV_VAR])
+        for key in dir(override_conf):
+            if key.isupper():
+                setattr(module, key, getattr(override_conf, key))
+
+    else:
+        from pilot_config import *  # noqa
+        import pilot_config
+        print('Loaded your LOCAL configuration at [{}]'.format(pilot_config.__file__))
+except ImportError:
+    pass

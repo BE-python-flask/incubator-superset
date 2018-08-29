@@ -23,6 +23,7 @@ from werkzeug.contrib.fixers import ProxyFix
 from superset import utils, config
 from superset.jvm import start_jvm, shutdown_jvm
 from superset.check_license import check_license
+from superset.security import SupersetSecurityManager
 
 
 APP_DIR = os.path.dirname(__file__)
@@ -44,15 +45,16 @@ conf = app.config
 MANIFEST_FILE = APP_DIR + '/static/assets/dist/manifest.json'
 FEATURE_GOGGLES = APP_DIR + '/static/assets/featureToggles.json'
 manifest = {}
-js_manifest = {}
+
 
 def parse_manifest_json():
-    global manifest, js_manifest
+    global manifest
     try:
         with open(MANIFEST_FILE, 'r') as f:
             manifest = json.load(f)
     except Exception:
         pass
+
 
 def parse_feature_toggles():
     global toggles
@@ -61,6 +63,7 @@ def parse_feature_toggles():
             toggles = json.load(f)
     except Exception:
         pass
+
 
 def get_manifest_file(filename):
     if app.debug:
@@ -71,9 +74,11 @@ def get_manifest_file(filename):
 parse_manifest_json()
 parse_feature_toggles()
 
+
 @app.context_processor
 def get_js_manifest():
     return dict(js_manifest=get_manifest_file)
+
 
 @app.context_processor
 def get_feature_toggles():
@@ -88,6 +93,17 @@ if conf.get('CAS_AUTH'):
     cas = CAS(app, conf.get('CAS_URL_PREFIX'))
 ssl._create_default_https_context = ssl._create_unverified_context
 
+
+for bp in conf.get('BLUEPRINTS'):
+    try:
+        print("Registering blueprint: '{}'".format(bp.name))
+        app.register_blueprint(bp)
+    except Exception as e:
+        print('blueprint registration failed')
+        logging.exception(e)
+
+if conf.get('SILENCE_FAB'):
+    logging.getLogger('flask_appbuilder').setLevel(logging.ERROR)
 
 if app.debug:
     # In production mode, add log handler to sys.stderr.
@@ -134,8 +150,10 @@ if app.config.get('ENABLE_TIME_ROTATE'):
 if conf.get('LICENSE_CHECK') or conf.get('GUARDIAN_AUTH'):
     start_jvm()
 
+
 if conf.get('LICENSE_CHECK'):
     check_license()
+
 
 if not conf.get('GUARDIAN_AUTH'):
     shutdown_jvm()
@@ -145,14 +163,33 @@ if app.config.get('ENABLE_CORS'):
     from flask_cors import CORS
     CORS(app, **app.config.get('CORS_OPTIONS'))
 
+
 if app.config.get('ENABLE_PROXY_FIX'):
     app.wsgi_app = ProxyFix(app.wsgi_app)
+
+
+if app.config.get('ENABLE_CHUNK_ENCODING'):
+
+    class ChunkedEncodingFix(object):
+        def __init__(self, app):
+            self.app = app
+
+        def __call__(self, environ, start_response):
+            # Setting wsgi.input_terminated tells werkzeug.wsgi to ignore
+            # content-length and read the stream till the end.
+            if environ.get('HTTP_TRANSFER_ENCODING', '').lower() == u'chunked':
+                environ['wsgi.input_terminated'] = True
+            return self.app(environ, start_response)
+
+    app.wsgi_app = ChunkedEncodingFix(app.wsgi_app)
+
 
 if app.config.get('UPLOAD_FOLDER'):
     try:
         os.makedirs(app.config.get('UPLOAD_FOLDER'))
     except OSError:
         pass
+
 
 for middleware in app.config.get('ADDITIONAL_MIDDLEWARE'):
     app.wsgi_app = middleware(app.wsgi_app)
@@ -187,11 +224,20 @@ def index_view():
     return MyIndexView
 
 
+custom_sm = app.config.get('CUSTOM_SECURITY_MANAGER') or SupersetSecurityManager
+if not issubclass(custom_sm, SupersetSecurityManager):
+    raise Exception(
+        """Your CUSTOM_SECURITY_MANAGER must now extend SupersetSecurityManager,
+         not FAB's security manager.
+         See [4565] in UPDATING.md""")
+
 appbuilder = AppBuilder(
     app, db.session,
     base_template='superset/base.html',
     indexview=index_view(),
-    security_manager_class=app.config.get("CUSTOM_SECURITY_MANAGER"))
+    security_manager_class=custom_sm,
+    update_perms=utils.get_update_perms_flag(),
+)
 
 security_manager = appbuilder.sm
 

@@ -271,18 +271,41 @@ class BaseColumn(AuditMixinNullable, ImportMixin):
     def __repr__(self):
         return self.column_name
 
-    num_types = (
-        'DOUBLE', 'FLOAT', 'INT', 'BIGINT',
-        'LONG', 'REAL', 'NUMERIC', 'DECIMAL', 'MONEY',
-    )
-    date_types = ('DATE', 'TIME', 'DATETIME')
+    # num_types = (
+    #     'DOUBLE', 'FLOAT', 'INT', 'BIGINT',
+    #     'LONG', 'REAL', 'NUMERIC', 'DECIMAL', 'MONEY',
+    # )
+    # date_types = ('DATE', 'TIME', 'DATETIME')
+    # str_types = ('VARCHAR', 'STRING', 'CHAR')
+    int_types = ('INT', 'BIGINT')
+    float_types = ('DOUBLE', 'FLOAT', 'NUMBER', 'DECIMAL')
+    bool_types = ('BOOL', )
+    date_types = ('DATE', 'TIME', 'YEAR')
     str_types = ('VARCHAR', 'STRING', 'CHAR')
 
     @property
-    def is_num(self):
+    def is_int(self):
         return (
             self.type and
-            any([t in self.type.upper() for t in self.num_types])
+            any([t in self.type.upper() for t in self.int_types])
+        )
+
+    @property
+    def is_float(self):
+        return (
+            self.type and
+            any([t in self.type.upper() for t in self.float_types])
+        )
+
+    @property
+    def is_num(self):
+        return self.type and self.is_int or self.is_float
+
+    @property
+    def is_bool(self):
+        return (
+            self.type and
+            any([t in self.type.upper() for t in self.bool_types])
         )
 
     @property

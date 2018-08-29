@@ -256,7 +256,7 @@ class BaseViz(object):
         )
         limit = int(form_data.get('limit') or 0)
         timeseries_limit_metric = form_data.get('timeseries_limit_metric')
-        row_limit = int(form_data.get('row_limit') or config.get('ROW_LIMIT'))
+        row_limit = int(form_data.get('row_limit') or config.get('SLICE_ROW_LIMIT'))
 
         # default order direction
         order_desc = form_data.get('order_desc', True)
@@ -1453,7 +1453,7 @@ class HistogramViz(BaseViz):
         """Returns the query object for this visualization"""
         d = super(HistogramViz, self).query_obj()
         d['row_limit'] = self.form_data.get(
-            'row_limit', int(config.get('VIZ_ROW_LIMIT')))
+            'row_limit', int(config.get('SLICE_ROW_LIMIT')))
         numeric_columns = self.form_data.get('all_columns_x')
         if numeric_columns is None:
             raise Exception(_('Must have at least one numeric column specified'))
