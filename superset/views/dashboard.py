@@ -657,7 +657,7 @@ class DashboardModelView(PilotModelView, PermissionManagement):
         return json_response(data=tree)
 
 
-class DashboardModelViewAsync(DashboardModelView):  # noqa
+class DashboardModelViewAsync(SupersetDashboardModelView):  # noqa
     list_columns = [
         'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
@@ -670,9 +670,9 @@ class DashboardModelViewAsync(DashboardModelView):  # noqa
     }
 
 
-class DashboardAddView(DashboardModelView):  # noqa
+class DashboardAddView(SupersetDashboardModelView):  # noqa
     list_columns = [
         'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
     ]
-    show_columns = list(set(DashboardModelView.edit_columns + list_columns))
+    show_columns = list(set(SupersetDashboardModelView.edit_columns + list_columns))
