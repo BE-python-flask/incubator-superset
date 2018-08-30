@@ -41,7 +41,7 @@ import sqlparse
 from tableschema import Table
 from werkzeug.utils import secure_filename
 
-from superset import app, cache, conf, db, utils
+from superset import app, cache_util, conf, db, utils
 from superset.exceptions import SupersetTemplateException
 from superset.utils import QueryStatus
 
@@ -92,48 +92,9 @@ class BaseEngineSpec(object):
             return type_code.upper()
 
     @classmethod
-    def extra_schema_metadata(cls, database, schema):
-        """Returns engine-specific schema metadata"""
-        raise NotImplementedError()
-
-    @classmethod
-    def extra_table_metadata(cls, database, schema, table):
+    def extra_table_metadata(cls, database, table_name, schema_name):
         """Returns engine-specific table metadata"""
-        columns = database.get_columns(table, schema)
-        indexes = database.get_indexes(table, schema)
-        primary_key = database.get_pk_constraint(table, schema)
-        foreign_keys = database.get_foreign_keys(table, schema)
-
-        for c in columns:
-            c['type'] = '{}'.format(c['type'])
-
-        keys = []
-        if primary_key and primary_key.get('constrained_columns'):
-            primary_key['column_names'] = primary_key.pop('constrained_columns')
-            primary_key['type'] = 'pk'
-            keys += [primary_key]
-        for fk in foreign_keys:
-            fk['column_names'] = fk.pop('constrained_columns')
-            fk['type'] = 'fk'
-        keys += foreign_keys
-        for idx in indexes:
-            idx['type'] = 'index'
-        keys += indexes
-
-        return {'columns': columns,
-                'primary_key': primary_key,
-                'foreign_keys': foreign_keys,
-                'indexes': keys}
-
-    @classmethod
-    def extra_column_metadata(cls, database, schema, table, column):
-        """Returns engine-specific column metadata"""
-        column = database.get_column(table, column, schema)
-        metadata = {}
-        if column:
-            column['type'] = '{}'.format(column['type'])
-            metadata = column
-        return metadata
+        return {}
 
     @classmethod
     def apply_limit_to_sql(cls, sql, limit, database):
@@ -241,7 +202,7 @@ class BaseEngineSpec(object):
         return "'{}'".format(dttm.strftime('%Y-%m-%d %H:%M:%S'))
 
     @classmethod
-    @cache.memoized_func(
+    @cache_util.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -573,7 +534,7 @@ class SqliteEngineSpec(BaseEngineSpec):
         return "datetime({col}, 'unixepoch')"
 
     @classmethod
-    @cache.memoized_func(
+    @cache_util.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -685,30 +646,6 @@ class MySQLEngineSpec(BaseEngineSpec):
         return message
 
 
-class InceptorEngineSpec(BaseEngineSpec):
-    engine = 'inceptor'
-    time_grains = tuple()
-
-    @classmethod
-    def extra_schema_metadata(cls, database, schema):
-        engine = database.get_sqla_engine()
-        query = engine.execute(
-            "SELECT commentstring, owner_name FROM system.databases_v "
-            "WHERE database_name='{}'".format(schema))
-        rs = query.fetchone()
-        metadata = {}
-        if rs:
-            metadata['comment'] = rs[0]
-            metadata['owner'] = rs[1]
-        return metadata
-
-    @classmethod
-    def adjust_database_uri(cls, uri, selected_schema=None):
-        if selected_schema:
-            uri.database = selected_schema
-        return uri
-
-
 class PrestoEngineSpec(BaseEngineSpec):
     engine = 'presto'
     cursor_execute_kwargs = {'parameters': None}
@@ -774,7 +711,7 @@ class PrestoEngineSpec(BaseEngineSpec):
         return 'from_unixtime({col})'
 
     @classmethod
-    @cache.memoized_func(
+    @cache_util.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -1042,7 +979,7 @@ class HiveEngineSpec(PrestoEngineSpec):
         hive.Cursor.fetch_logs = patched_hive.fetch_logs
 
     @classmethod
-    @cache.memoized_func(
+    @cache_util.memoized_func(
         timeout=600,
         key=lambda *args, **kwargs: 'db:{}:{}'.format(args[0].id, args[1]))
     def fetch_result_sets(cls, db, datasource_type, force=False):
@@ -1560,6 +1497,30 @@ class KylinEngineSpec(BaseEngineSpec):
             return "CAST('{}' AS TIMESTAMP)".format(
                 dttm.strftime('%Y-%m-%d %H:%M:%S'))
         return "'{}'".format(dttm.strftime('%Y-%m-%d %H:%M:%S'))
+
+
+class InceptorEngineSpec(BaseEngineSpec):
+    engine = 'inceptor'
+    time_grains = tuple()
+
+    @classmethod
+    def extra_schema_metadata(cls, database, schema):
+        engine = database.get_sqla_engine()
+        query = engine.execute(
+            "SELECT commentstring, owner_name FROM system.databases_v "
+            "WHERE database_name='{}'".format(schema))
+        rs = query.fetchone()
+        metadata = {}
+        if rs:
+            metadata['comment'] = rs[0]
+            metadata['owner'] = rs[1]
+        return metadata
+
+    @classmethod
+    def adjust_database_uri(cls, uri, selected_schema=None):
+        if selected_schema:
+            uri.database = selected_schema
+        return uri
 
 
 engines = {

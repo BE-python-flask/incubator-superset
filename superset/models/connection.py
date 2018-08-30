@@ -25,7 +25,7 @@ from sqlalchemy.sql.expression import TextAsFrom
 from sqlalchemy.orm.session import make_transient
 from sqlalchemy.pool import NullPool
 
-from superset import db, app, db_engine_specs, conf, utils
+from superset import db, app, db_engine_specs, conf, utils, security_manager
 from superset.cache import TokenCache
 from superset.cas.keytab import download_keytab
 from superset.utils import GUARDIAN_AUTH
@@ -162,16 +162,43 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         return effective_username
 
     @utils.memoized(watch=('impersonate_user', 'sqlalchemy_uri_decrypted', 'extra'))
-    def get_sqla_engine(self, schema=None, use_pool=True):
+    def get_sqla_engine(self, schema=None, nullpool=True, user_name=None):
+        extra = self.get_extra()
         url = make_url(self.sqlalchemy_uri_decrypted)
-        connect_args = self.append_args(self.get_args().get('connect_args', {}))
         url = self.db_engine_spec.adjust_database_uri(url, schema)
         if url.drivername == 'oracle':
             os.environ["NLS_LANG"] = "SIMPLIFIED CHINESE_CHINA.UTF8"
-        if use_pool:
-            return create_engine(url, connect_args=connect_args, pool_size=10)
-        else:
-            return create_engine(url, connect_args=connect_args, poolclass=NullPool)
+        effective_username = self.get_effective_user(url, user_name)
+        # If using MySQL or Presto for example, will set url.username
+        # If using Hive, will not do anything yet since that relies on a
+        # configuration parameter instead.
+        self.db_engine_spec.modify_url_for_impersonation(
+            url,
+            self.impersonate_user,
+            effective_username)
+
+        masked_url = self.get_password_masked_url(url)
+        logging.info('Database.get_sqla_engine(). Masked URL: {0}'.format(masked_url))
+
+        params = extra.get('engine_params', {})
+        if nullpool:
+            params['poolclass'] = NullPool
+
+        # If using Hive, this will set hive.server2.proxy.user=$effective_username
+        configuration = {}
+        configuration.update(
+            self.db_engine_spec.get_configuration_for_impersonation(
+                str(url),
+                self.impersonate_user,
+                effective_username))
+        if configuration:
+            params['connect_args'] = {'configuration': configuration}
+
+        DB_CONNECTION_MUTATOR = config.get('DB_CONNECTION_MUTATOR')
+        if DB_CONNECTION_MUTATOR:
+            url, params = DB_CONNECTION_MUTATOR(
+                url, params, effective_username, security_manager)
+        return create_engine(url, **params)
 
     def get_reserved_words(self):
         return self.get_dialect().preparer.reserved_words
@@ -281,6 +308,9 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         d = {grain.duration: grain for grain in self.grains()}
         d.update({grain.label: grain for grain in self.grains()})
         return d
+
+    def get_extra(self):
+        return self.get_args()
 
     def get_args(self):
         args = {}

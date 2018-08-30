@@ -154,7 +154,7 @@ class SqlEditorLeftBar extends React.PureComponent {
           <AsyncSelect
             dataEndpoint={
               '/databaseasync/api/' +
-              'read?_flt_0_expose_in_sqllab=1&' +
+              'read?_flt_0_expose=1&' +
               '_oc_DatabaseAsync=database_name&' +
               '_od_DatabaseAsync=asc'
             }

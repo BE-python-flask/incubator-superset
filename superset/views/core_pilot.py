@@ -1,11 +1,8 @@
 """Views for Pilot"""
-import json
 import logging
 import pandas as pd
-import sys
 import time
 import traceback
-import zlib
 from datetime import datetime, timedelta
 from flask import (
     g, request, redirect, flash, Response, Markup, url_for, render_template
@@ -15,8 +12,8 @@ from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 import sqlalchemy as sqla
-from sqlalchemy import and_, create_engine, or_, update
-from sqlalchemy.engine.url import make_url
+from sqlalchemy import and_, create_engine, update
+import simplejson as json
 from urllib import parse
 from urllib.parse import quote
 from werkzeug.routing import BaseConverter
@@ -27,13 +24,13 @@ from superset import (
 from superset import simple_cache as cache
 from superset.exceptions import (
     PropertyException, DatabaseException, ErrorRequestException,
-    SupersetException2, PermissionException
+    SupersetException2
 )
 from superset.jinja_context import get_template_processor
 from superset.legacy import cast_form_data
 from superset.message import *
 from superset.models import (
-    Database, Dataset, Slice, Dashboard, TableColumn, SqlMetric, Query, Log,
+    Database, Dataset, Slice, Dashboard, Query, Log,
     FavStar, str_to_model, Number, Url, KeyValue, CssTemplate, DatasourceAccessRequest,
     AnnotationDatasource
 )
@@ -50,7 +47,6 @@ from .base import (
 from .hdfs import HDFSBrowser
 from .dashboard import DashboardModelView
 from .utils import bootstrap_user_data
-from .slice import SliceModelView
 
 
 config = app.config
