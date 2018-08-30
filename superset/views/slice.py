@@ -363,7 +363,7 @@ class SliceModelView(PilotModelView, PermissionManagement):
         return response
 
 
-class SliceAsync(SliceModelView):  # noqa
+class SliceAsync(SupersetSliceModelView):  # noqa
     list_columns = [
         'id', 'slice_link', 'viz_type', 'slice_name',
         'creator', 'modified', 'icons']
@@ -373,9 +373,9 @@ class SliceAsync(SliceModelView):  # noqa
     }
 
 
-class SliceAddView(SliceModelView):  # noqa
+class SliceAddView(SupersetSliceModelView):  # noqa
     list_columns = [
         'id', 'slice_name', 'slice_link', 'viz_type',
         'datasource_link', 'owners', 'modified', 'changed_on']
-    show_columns = list(set(SliceModelView.edit_columns + list_columns))
+    show_columns = list(set(SupersetSliceModelView.edit_columns + list_columns))
 
