@@ -135,7 +135,7 @@ class DatabaseView(PilotModelView, PermissionManagement):  # noqa
     def pre_update(self, old_obj, new_obj):
         if old_obj.database_name == config.get('DEFAULT_INCEPTOR_CONN_NAME'):
             raise PermissionException(CANNOT_EDIT_DEFAULT_CONN)
-        super(PilotDatabaseView, self).pre_update(old_obj, new_obj)
+        super(DatabaseView, self).pre_update(old_obj, new_obj)
 
     def check_column_values(self, obj):
         if not obj.database_name:
@@ -147,7 +147,7 @@ class DatabaseView(PilotModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION_ARGS)
 
     def get_list_args(self, args):
-        kwargs = super(PilotDatabaseView, self).get_list_args(args)
+        kwargs = super(DatabaseView, self).get_list_args(args)
         kwargs['database_type'] = args.get('database_type')
         return kwargs
 
@@ -568,7 +568,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
                     "Error parameter ids: {ids}, queried {num} connection(s)")
                                          .format(ids=db_ids, num=len(objs))
                                          )
-            db_view = PilotDatabaseView()
+            db_view = DatabaseView()
             for id in db_ids:
                 db_view.delete(id)
         #
@@ -779,7 +779,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
         }
 
 
-class DatabaseAsync(DatabaseView):
+class DatabaseAsync(SupersetDatabaseView):
     list_columns = [
         'id', 'database_name',
         'expose', 'allow_ctas', 'force_ctas_schema',
@@ -834,5 +834,5 @@ class CsvToDatabaseView(SimpleFormView):
         return redirect('/tablemodelview/list/')
 
 
-class DatabaseTablesAsync(DatabaseView):
+class DatabaseTablesAsync(SupersetDatabaseView):
     list_columns = ['id', 'all_table_names', 'all_schema_names']
