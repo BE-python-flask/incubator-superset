@@ -1,4 +1,4 @@
-import Jed from 'jed';
+import Jed from 'jed/jed';
 
 const DEFAULT_LANGUAGE_PACK = {
   domain: 'superset',

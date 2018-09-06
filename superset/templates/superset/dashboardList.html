@@ -1,0 +1,18 @@
+{% extends "superset/basic.html" %}
+
+{% block head_css %}
+{{ super() }}
+<link rel="stylesheet" type="text/css" href="{{ js_manifest('dashboardList' + '.css') }}" />
+{% endblock %}
+
+{% block body %}
+    <div id="dashboard"></div>
+{% endblock %}
+
+{% block tail_js %}
+    {{ super() }}
+    {% with filename="dashboardList" %}
+        {% include "superset/partials/_script_tag.html" %}
+    {% endwith %}
+{% endblock %}
+

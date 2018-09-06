@@ -1532,8 +1532,8 @@ class Superset(BaseSupersetView, PermissionManagement):
             return json_success(json.dumps(bootstrap_data))
 
         return self.render_template(
-            'superset/dashboard.html',
-            entry='dashboard',
+            'superset/dashboardDetails.html',
+            entry='dashboardDetails',
             standalone_mode=standalone_mode,
             title=dash.name,
             bootstrap_data=json.dumps(bootstrap_data),

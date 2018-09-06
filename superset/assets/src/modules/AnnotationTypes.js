@@ -1,4 +1,4 @@
-import { VIZ_TYPES } from '../visualizations';
+import { viz_types } from '../visualizations/constants';
 import vizTypes from '../explore/visTypes';
 
 export const ANNOTATION_TYPES = {
@@ -23,7 +23,7 @@ export const DEFAULT_ANNOTATION_TYPE = ANNOTATION_TYPES.FORMULA;
 
 export const ANNOTATION_SOURCE_TYPES = {
   NATIVE: 'NATIVE',
-  ...VIZ_TYPES,
+  ...viz_types,
 };
 
 export function getAnnotationSourceTypeLabels(sourceType) {
@@ -56,17 +56,17 @@ export function getSupportedSourceTypes(annotationType) {
 
 // Map from viz type to supported annotation
 const SUPPORTED_ANNOTATIONS = {
-  [VIZ_TYPES.line]: [
+  [viz_types.line]: [
     ANNOTATION_TYPES.TIME_SERIES,
     ANNOTATION_TYPES.INTERVAL,
     ANNOTATION_TYPES.EVENT,
     ANNOTATION_TYPES.FORMULA,
   ],
-  [VIZ_TYPES.bar]: [
+  [viz_types.bar]: [
     ANNOTATION_TYPES.INTERVAL,
     ANNOTATION_TYPES.EVENT,
   ],
-  [VIZ_TYPES.area]: [
+  [viz_types.area]: [
     ANNOTATION_TYPES.INTERVAL,
     ANNOTATION_TYPES.EVENT,
   ],
