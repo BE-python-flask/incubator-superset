@@ -67,6 +67,7 @@ setup(
         'flask-compress==1.4.0',
         'flask-cors==3.0.3',
         'flask-migrate==2.1.1',
+        'flask-script==2.0.6',
         'flask-restful==0.3.6',
         'flask-testing==0.7.1',
         'future==0.16.0',
