@@ -3,6 +3,7 @@ import nvd3Vis from './nvd3_vis';
 import lineMulti from './line_multi';
 import { viz_types } from './constants';
 
+export const VIZ_TYPES = viz_types;
 const vizMap = {
   [viz_types.area]: nvd3Vis,
   [viz_types.bar]: nvd3Vis,
