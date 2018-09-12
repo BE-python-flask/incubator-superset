@@ -62,6 +62,7 @@ setup(
         'cryptography==1.9',
         'cx_Oracle==5.3',
         'fileRobot-client==0.0.1',
+        'flask==0.12.2',
         'flask-appbuilder==1.10.0',
         'flask-caching==1.4.0',
         'flask-compress==1.4.0',
