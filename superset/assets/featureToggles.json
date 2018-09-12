@@ -24,6 +24,11 @@
     "path": "pilot",
     "_path": "superset"
   },
+  "dashboard_details": {
+    "show": true,
+    "version": "v2",
+    "path": "superset"
+  },
 
   "slice": {
     "show": true,

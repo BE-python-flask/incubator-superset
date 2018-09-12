@@ -153,8 +153,9 @@ class Header extends React.PureComponent {
 
     this.props.onSave(data, dashboardInfo.id, SAVE_TYPE_OVERWRITE);
   }
-
+  
   render() {
+    const isV2 = window.featureToggles.dashboard_details.version === 'v2';
     const {
       dashboardTitle,
       layout,
@@ -174,6 +175,7 @@ class Header extends React.PureComponent {
       dashboardInfo,
       hasUnsavedChanges,
     } = this.props;
+    const _isV2Preview = isV2 ? false : true;
 
     const userCanEdit = dashboardInfo.dash_edit_perm;
     const userCanSaveAs = dashboardInfo.dash_save_perm;
@@ -196,7 +198,7 @@ class Header extends React.PureComponent {
               isStarred={this.props.isStarred}
             />
           </span>
-          {isV2Preview && (
+          {_isV2Preview && (
             <div
               role="none"
               className="v2-preview-badge"
@@ -206,7 +208,7 @@ class Header extends React.PureComponent {
               <span className="fa fa-info-circle m-l-5" />
             </div>
           )}
-          {isV2Preview &&
+          {_isV2Preview &&
             this.state.showV2PreviewModal && (
               <V2PreviewModal onClose={this.toggleShowV2PreviewModal} />
             )}
@@ -251,12 +253,13 @@ class Header extends React.PureComponent {
                   bsStyle={popButton ? 'primary' : undefined}
                   onClick={this.overwriteDashboard}
                 >
-                  {isV2Preview
+                  {_isV2Preview
                     ? t('Persist as Dashboard v2')
                     : t('Save changes')}
                 </Button>
               )}
-
+            
+            {/* here is just changed the label: from 'Edit to persist Dashboard v2' to 'Edit' */}
             {!editMode &&
               isV2Preview && (
                 <Button
@@ -265,7 +268,7 @@ class Header extends React.PureComponent {
                   bsStyle={popButton ? 'primary' : undefined}
                   disabled={!userCanEdit}
                 >
-                  {t('Edit to persist Dashboard v2')}
+                  {t('Edit')}
                 </Button>
               )}
 

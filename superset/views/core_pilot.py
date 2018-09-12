@@ -38,6 +38,7 @@ from superset.utils import merge_extra_filters, merge_request_params
 from superset.connector_registry import ConnectorRegistry
 from superset.sql_parse import SupersetQuery
 from superset.timeout_decorator import connection_timeout
+import superset.models.core as models
 
 from .base import (
     BaseSupersetView, SupersetModelView, DeleteMixin, PermissionManagement,
@@ -1102,17 +1103,71 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.commit()
         Log.log_update(dash, 'dashboard', g.user.id)
         return 'SUCCESS'
+    @staticmethod
+    def _is_v2_dash(positions):
+        return (
+                isinstance(positions, dict) and
+                positions.get('DASHBOARD_VERSION_KEY') == 'v2'
+        )
 
     @staticmethod
     def _set_dash_metadata(dashboard, data):
         positions = data['positions']
-        slice_ids = [int(d['slice_id']) for d in positions]
-        dashboard.slices = [o for o in dashboard.slices if o.id in slice_ids]
-        positions = sorted(data['positions'], key=lambda x: int(x['slice_id']))
+        is_v2_dash = Superset._is_v2_dash(positions)
+
+        # @TODO remove upon v1 deprecation
+        if not is_v2_dash:
+            positions = data['positions']
+            slice_ids = [int(d['slice_id']) for d in positions]
+            dashboard.slices = [o for o in dashboard.slices if o.id in slice_ids]
+            positions = sorted(data['positions'], key=lambda x: int(x['slice_id']))
+            dashboard.position_json = json.dumps(positions, indent=4, sort_keys=True)
+            md = dashboard.params_dict
+            dashboard.css = data['css']
+            dashboard.dashboard_title = data['dashboard_title']
+
+            if 'filter_immune_slices' not in md:
+                md['filter_immune_slices'] = []
+            if 'timed_refresh_immune_slices' not in md:
+                md['timed_refresh_immune_slices'] = []
+            if 'filter_immune_slice_fields' not in md:
+                md['filter_immune_slice_fields'] = {}
+            md['expanded_slices'] = data['expanded_slices']
+            md['default_filters'] = data.get('default_filters', '')
+            dashboard.json_metadata = json.dumps(md, indent=4)
+            return
+
+        # find slices in the position data
+        slice_ids = []
+        slice_id_to_name = {}
+        for value in positions.values():
+            if (
+                    isinstance(value, dict) and value.get('meta') and
+                    value.get('meta').get('chartId')
+            ):
+                slice_id = value.get('meta').get('chartId')
+                slice_ids.append(slice_id)
+                slice_id_to_name[slice_id] = value.get('meta').get('sliceName')
+
+        session = db.session()
+        Slice = models.Slice  # noqa
+        current_slices = session.query(Slice).filter(
+            Slice.id.in_(slice_ids)).all()
+
+        dashboard.slices = current_slices
+
+        # update slice names. this assumes user has permissions to update the slice
+        for slc in dashboard.slices:
+            new_name = slice_id_to_name[slc.id]
+            if slc.slice_name != new_name:
+                slc.slice_name = new_name
+                session.merge(slc)
+                session.flush()
+
         dashboard.position_json = json.dumps(positions, indent=4, sort_keys=True)
         md = dashboard.params_dict
-        dashboard.css = data['css']
-        dashboard.name = data['dashboard_title']
+        dashboard.css = data.get('css')
+        dashboard.dashboard_title = data['dashboard_title']
 
         if 'filter_immune_slices' not in md:
             md['filter_immune_slices'] = []
@@ -1121,8 +1176,13 @@ class Superset(BaseSupersetView, PermissionManagement):
         if 'filter_immune_slice_fields' not in md:
             md['filter_immune_slice_fields'] = {}
         md['expanded_slices'] = data['expanded_slices']
-        md['default_filters'] = data.get('default_filters', '')
+        default_filters_data = json.loads(data.get('default_filters', '{}'))
+        for key in default_filters_data.keys():
+            if int(key) not in slice_ids:
+                del default_filters_data[key]
+        md['default_filters'] = json.dumps(default_filters_data)
         dashboard.json_metadata = json.dumps(md, indent=4)
+
 
     @expose("/add_slices/<dashboard_id>/", methods=['POST'])
     def add_slices(self, dashboard_id):

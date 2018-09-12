@@ -30,6 +30,8 @@ export function appSetup() {
   window.$ = $;
   window.jQuery = $;
   require('bootstrap');
+  // below are for feature toggles:
+  window.featureToggles = JSON.parse(document.getElementById('toggles').getAttribute('data-toggle'));
 }
 
 // Error messages used in many places across applications
