@@ -38,7 +38,7 @@ from superset.utils import merge_extra_filters, merge_request_params
 from superset.connector_registry import ConnectorRegistry
 from superset.sql_parse import SupersetQuery
 from superset.timeout_decorator import connection_timeout
-import superset.models.core as models
+from superset import models
 
 from .base import (
     BaseSupersetView, SupersetModelView, DeleteMixin, PermissionManagement,
@@ -1103,6 +1103,7 @@ class Superset(BaseSupersetView, PermissionManagement):
         session.commit()
         Log.log_update(dash, 'dashboard', g.user.id)
         return 'SUCCESS'
+
     @staticmethod
     def _is_v2_dash(positions):
         return (
@@ -1182,7 +1183,6 @@ class Superset(BaseSupersetView, PermissionManagement):
                 del default_filters_data[key]
         md['default_filters'] = json.dumps(default_filters_data)
         dashboard.json_metadata = json.dumps(md, indent=4)
-
 
     @expose("/add_slices/<dashboard_id>/", methods=['POST'])
     def add_slices(self, dashboard_id):
