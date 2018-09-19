@@ -92,7 +92,6 @@ setup(
         'pyyaml>=3.11',
         'requests==2.18.4',
         'simplejson==3.15.0',
-        'sqlalchemy==1.2.2',
         'sqlalchemy-utils==0.32.21',
         'sqlparse==0.2.4',
         'tableschema==1.1.0',
