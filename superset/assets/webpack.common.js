@@ -22,6 +22,7 @@ module.exports = {
       tableList: APP_DIR + '/src/tableList.js',
       dashboardList: APP_DIR + '/src/dashboardList.js',
       // dashboardDetails: APP_DIR + '/src/dashboardDetails/Dashboard.jsx',
+      sliceList: APP_DIR + '/src/sliceList.js',
 
     theme: APP_DIR + '/src/theme.js',
     common: APP_DIR + '/src/common.js',
