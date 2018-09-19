@@ -1,8 +1,7 @@
-# FROM 172.16.1.99/transwarp/tdh-baseimage:transwarp-5.1
 FROM 172.16.1.99/gold/guardian-plugins:transwarp-6.0
 
-RUN yum install -y gcc-c++ libaio cyrus-sasl mariadb-devel unixODBC-devel \
-        krb5-devel cyrus-sasl-plain cyrus-sasl-gssapi freetds-devel && \
+RUN yum install -y gcc-c++ libaio cyrus-sasl mariadb-devel unixODBC-devel krb5-devel \
+        cyrus-sasl-plain cyrus-sasl-gssapi cyrus-sasl-lib cyrus-sasl-devel freetds-devel  && \
     ln -s /usr/lib64/libsasl2.so.3.0.0 /usr/lib64/libsasl2.so.2 && \
     yum clean all && \
     rm -Rf /var/cache/yum && \
@@ -40,3 +39,6 @@ RUN wget ftp://172.16.1.32/pub/tos/build/confd_modified -O /usr/bin/confd && \
     chmod +x /usr/bin/confd
 
 CMD ["/bin/bash"]
+
+
+# docker build -t 172.16.1.41:5000/jenkins/pilot-base:transwarp-6.0.1 .

@@ -1,4 +1,4 @@
-FROM 172.16.1.41:5000/jenkins/pilot-base:transwarp-6.0
+FROM 172.16.1.41:5000/jenkins/pilot-base:transwarp-6.0.1
 
 # license jar
 COPY ./jar/ /usr/local/lib/
