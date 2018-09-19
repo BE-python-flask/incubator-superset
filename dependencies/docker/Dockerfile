@@ -8,7 +8,7 @@ COPY ./rpm/ /tmp/rpm/
 RUN find /tmp/rpm -maxdepth 2 -type f -iname "fileRobot*" -exec pip install {} \; && \
     find /tmp/rpm -maxdepth 2 -type f -iname "sqlalchemy*" -exec pip install {} \; && \
     find /tmp/rpm -maxdepth 2 -type f -iname "flask*appbuilder*" -exec pip install {} \; && \
-    find /tmp/rpm -maxdepth 2 -type f -iname "pilot*" -exec pip install {} \; && \
+    find /tmp/rpm -maxdepth 2 -type f -iname "superset*" -exec pip install {} \; && \
     mkdir -p /etc/pilot/conf/ /var/log/pilot/ && \
     touch /var/log/pilot/pilot.log && \
     rm -rf /tmp/*
