@@ -41,7 +41,7 @@ function build_pilot
 
     cd pilot
     python3 setup.py bdist_rpm
-    find . -type f -iname "pilot*tar.gz" -exec cp {} $RPM_DIR \;
+    find . -type f -iname "superset*tar.gz" -exec cp {} $RPM_DIR \;
     cd -
 
     cd fileRobot/fileRobot-client
