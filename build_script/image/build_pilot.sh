@@ -36,7 +36,7 @@ function build_pilot
     curl -u 'jiajie:jiajie' -O http://172.16.1.97:8080/remote.php/webdav/pilot/node_modules-transwarp-6.0.1.tar.gz
     tar -zxvf node_modules-transwarp-6.0.1.tar.gz
     rm -f node_modules-transwarp-6.0.1.tar.gz
-    npm run prod
+    npm run publish
     cd -
 
     cd pilot
