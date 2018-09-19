@@ -1,5 +1,5 @@
 /**
  * Created by haitao on 17-6-26.
  */
-export SliceDelete from './SliceDelete';
-export SliceEdit from './SliceEdit';
+export { default as SliceDelete } from './SliceDelete';
+export { default as SliceEdit } from './SliceEdit';
