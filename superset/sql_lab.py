@@ -122,7 +122,7 @@ def get_sql_results(ctask, query_id, rendered_query, return_results=True,
 def execute(ctask, query_id, rendered_query, return_results=True,
             store_results=False, user_name=None, session=None):
     """Executes the sql query returns the results."""
-
+    SQL_MAX_ROWS = app.config.get('SQL_MAX_ROW')
     query = get_query(query_id, session)
     payload = dict(query_id=query_id)
 
@@ -148,71 +148,70 @@ def execute(ctask, query_id, rendered_query, return_results=True,
     if store_results and not results_backend:
         return handle_error("Results backend isn't configured.")
 
-    # Limit enforced only for retrieving the data, not for the CTA queries.
-    superset_query = SupersetQuery(rendered_query)
-    executed_sql = superset_query.stripped()
-    SQL_MAX_ROWS = app.config.get('SQL_MAX_ROW')
-    if not superset_query.is_select() and not database.allow_dml:
-        return handle_error(
-            'Only `SELECT` statements are allowed against this database')
-    if query.select_as_cta:
-        if not superset_query.is_select():
-            return handle_error(
-                'Only `SELECT` statements can be used with the CREATE TABLE '
-                'feature.')
-        if not query.tmp_table_name:
-            start_dttm = datetime.fromtimestamp(query.start_time)
-            query.tmp_table_name = 'tmp_{}_table_{}'.format(
-                query.user_id, start_dttm.strftime('%Y_%m_%d_%H_%M_%S'))
-        executed_sql = superset_query.as_create_table(query.tmp_table_name)
-        query.select_as_cta_used = True
-    if (superset_query.is_select() and SQL_MAX_ROWS and
-            (not query.limit or query.limit > SQL_MAX_ROWS)):
-        query.limit = SQL_MAX_ROWS
-        executed_sql = database.apply_limit_to_sql(executed_sql, query.limit)
-
-    # Hook to allow environment-specific mutation (usually comments) to the SQL
-    SQL_QUERY_MUTATOR = config.get('SQL_QUERY_MUTATOR')
-    if SQL_QUERY_MUTATOR:
-        executed_sql = SQL_QUERY_MUTATOR(
-            executed_sql, user_name, security_manager, database)
-
-    query.executed_sql = executed_sql
+    # query.executed_sql = executed_sql
     query.status = QueryStatus.RUNNING
     query.start_running_time = utils.now_as_float()
     session.merge(query)
     session.commit()
-    logging.info("Set query to 'running'")
-    conn = None
-    try:
-        engine = database.get_sqla_engine(
-            schema=query.schema,
-            nullpool=not ctask.request.called_directly,
-            user_name=user_name,
-        )
-        conn = engine.raw_connection()
-        cursor = conn.cursor()
-        logging.info('Running query: \n{}'.format(executed_sql))
-        # logging.info(query.executed_sql)
-        cursor.execute(query.executed_sql, **db_engine_spec.cursor_execute_kwargs)
-        # logging.info('Handling cursor')
-        db_engine_spec.handle_cursor(cursor, query, session)
-        # logging.info('Fetching data: {}'.format(query.to_dict()))
-        data = db_engine_spec.fetch_data(cursor, query.limit)
-    except SoftTimeLimitExceeded as e:
-        logging.exception(e)
-        if conn is not None:
-            conn.close()
-        return handle_error(
-            "SQL Lab timeout. This environment's policy is to kill queries "
-            'after {} seconds.'.format(SQLLAB_TIMEOUT))
-    except Exception as e:
-        logging.exception(e)
-        if conn is not None:
-            conn.close()
-        return handle_error(db_engine_spec.extract_error_message(e))
 
-    logging.info('Fetching cursor description')
+    engine = database.get_sqla_engine(
+        schema=query.schema,
+        nullpool=not ctask.request.called_directly,
+        user_name=user_name,
+    )
+    conn = engine.raw_connection()
+    cursor = conn.cursor()
+    logging.info('Running query: \n{}'.format(rendered_query))
+
+    # Limit enforced only for retrieving the data, not for the CTA queries.
+    sqls = rendered_query.strip().rstrip(';').split(';')
+    sqls = [s.strip().strip('\n') for s in sqls]
+    for sql in sqls:
+        superset_query = SupersetQuery(sql)
+        executed_sql = superset_query.stripped()
+        # if not superset_query.is_select() and not database.allow_dml:
+        #     return handle_error(
+        #         'Only `SELECT` statements are allowed against this database')
+        # if query.select_as_cta:
+        #     if not superset_query.is_select():
+        #         return handle_error(
+        #             'Only `SELECT` statements can be used with the CREATE TABLE '
+        #             'feature.')
+        #     if not query.tmp_table_name:
+        #         start_dttm = datetime.fromtimestamp(query.start_time)
+        #         query.tmp_table_name = 'tmp_{}_table_{}'.format(
+        #             query.user_id, start_dttm.strftime('%Y_%m_%d_%H_%M_%S'))
+        #     executed_sql = superset_query.as_create_table(query.tmp_table_name)
+        #     query.select_as_cta_used = True
+        if (superset_query.is_select() and SQL_MAX_ROWS and
+                (not query.limit or query.limit > SQL_MAX_ROWS)):
+            query.limit = SQL_MAX_ROWS
+            executed_sql = database.apply_limit_to_sql(executed_sql, query.limit)
+
+        # Hook to allow environment-specific mutation (usually comments) to the SQL
+        # SQL_QUERY_MUTATOR = config.get('SQL_QUERY_MUTATOR')
+        # if SQL_QUERY_MUTATOR:
+        #     executed_sql = SQL_QUERY_MUTATOR(
+        #         executed_sql, user_name, security_manager, database)
+
+        try:
+            # logging.info(query.executed_sql)
+            cursor.execute(executed_sql, **db_engine_spec.cursor_execute_kwargs)
+        except SoftTimeLimitExceeded as e:
+            logging.exception(e)
+            if conn is not None:
+                conn.close()
+            return handle_error(
+                "SQL Lab timeout. This environment's policy is to kill queries "
+                'after {} seconds.'.format(SQLLAB_TIMEOUT))
+        except Exception as e:
+            logging.exception(e)
+            if conn is not None:
+                conn.close()
+            return handle_error(db_engine_spec.extract_error_message(e))
+
+    db_engine_spec.handle_cursor(cursor, query, session)
+    data = db_engine_spec.fetch_data(cursor, query.limit)
 
     if conn is not None:
         conn.commit()
@@ -226,14 +225,14 @@ def execute(ctask, query_id, rendered_query, return_results=True,
     query.rows = cdf.size
     query.progress = 100
     query.status = QueryStatus.SUCCESS
-    if query.select_as_cta:
-        query.select_sql = '{}'.format(
-            database.select_star(
-                query.tmp_table_name,
-                limit=query.limit,
-                schema=database.force_ctas_schema,
-                show_cols=False,
-                latest_partition=False))
+    # if query.select_as_cta:
+    #     query.select_sql = '{}'.format(
+    #         database.select_star(
+    #             query.tmp_table_name,
+    #             limit=query.limit,
+    #             schema=database.force_ctas_schema,
+    #             show_cols=False,
+    #             latest_partition=False))
     query.end_time = utils.now_as_float()
     session.merge(query)
     session.flush()
@@ -244,16 +243,16 @@ def execute(ctask, query_id, rendered_query, return_results=True,
         'columns': cdf.columns if cdf.columns else [],
         'query': query.to_dict(),
     })
-    if store_results:
-        key = '{}'.format(uuid.uuid4())
-        logging.info('Storing results in results backend, key: {}'.format(key))
-        json_payload = json.dumps(payload, default=utils.json_iso_dttm_ser)
-        cache_timeout = database.cache_timeout
-        if cache_timeout is None:
-            cache_timeout = config.get('CACHE_DEFAULT_TIMEOUT', 0)
-        results_backend.set(key, utils.zlib_compress(json_payload), cache_timeout)
-        query.results_key = key
-        query.end_result_backend_time = utils.now_as_float()
+    # if store_results:
+    #     key = '{}'.format(uuid.uuid4())
+    #     logging.info('Storing results in results backend, key: {}'.format(key))
+    #     json_payload = json.dumps(payload, default=utils.json_iso_dttm_ser)
+    #     cache_timeout = database.cache_timeout
+    #     if cache_timeout is None:
+    #         cache_timeout = config.get('CACHE_DEFAULT_TIMEOUT', 0)
+    #     results_backend.set(key, utils.zlib_compress(json_payload), cache_timeout)
+    #     query.results_key = key
+    #     query.end_result_backend_time = utils.now_as_float()
 
     session.merge(query)
     session.commit()
