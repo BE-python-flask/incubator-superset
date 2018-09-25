@@ -184,6 +184,9 @@ class Database(Model, AuditMixinNullable, ImportMixin):
         if nullpool:
             params['poolclass'] = NullPool
 
+        connect_args = self.append_args(self.get_args().get('connect_args', {}))
+        params['connect_args'] = connect_args
+
         # If using Hive, this will set hive.server2.proxy.user=$effective_username
         configuration = {}
         configuration.update(
@@ -192,7 +195,7 @@ class Database(Model, AuditMixinNullable, ImportMixin):
                 self.impersonate_user,
                 effective_username))
         if configuration:
-            params['connect_args'] = {'configuration': configuration}
+            params['connect_args'].update({'configuration': configuration})
 
         DB_CONNECTION_MUTATOR = config.get('DB_CONNECTION_MUTATOR')
         if DB_CONNECTION_MUTATOR:

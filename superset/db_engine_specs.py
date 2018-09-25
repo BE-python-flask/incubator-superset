@@ -1522,6 +1522,13 @@ class InceptorEngineSpec(BaseEngineSpec):
             uri.database = selected_schema
         return uri
 
+    @classmethod
+    def fetch_data(cls, cursor, limit):
+        data = super(InceptorEngineSpec, cls).fetch_data(cursor, limit)
+        if len(data) != 0 and type(data[0]).__name__ == 'Row':
+            data = [tuple(row) for row in data]  # pyodbc.Row to tuple
+        return data
+
 
 engines = {
     o.engine: o for o in globals().values()

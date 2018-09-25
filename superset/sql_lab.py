@@ -193,12 +193,11 @@ def execute(ctask, query_id, rendered_query, return_results=True,
         conn = engine.raw_connection()
         cursor = conn.cursor()
         logging.info('Running query: \n{}'.format(executed_sql))
-        logging.info(query.executed_sql)
-        cursor.execute(query.executed_sql,
-                       **db_engine_spec.cursor_execute_kwargs)
-        logging.info('Handling cursor')
+        # logging.info(query.executed_sql)
+        cursor.execute(query.executed_sql, **db_engine_spec.cursor_execute_kwargs)
+        # logging.info('Handling cursor')
         db_engine_spec.handle_cursor(cursor, query, session)
-        logging.info('Fetching data: {}'.format(query.to_dict()))
+        # logging.info('Fetching data: {}'.format(query.to_dict()))
         data = db_engine_spec.fetch_data(cursor, query.limit)
     except SoftTimeLimitExceeded as e:
         logging.exception(e)

@@ -263,6 +263,9 @@ SQL_CELERY_RESULTS_DB_FILE_PATH = os.path.join(DATA_DIR, 'celery_results.sqlite'
 # HTTP_HEADERS = {'X-Frame-Options': 'SAMEORIGIN'}
 HTTP_HEADERS = {}
 
+# The MAX duration (in seconds) a query can run for before being killed
+# by celery.
+SQLLAB_ASYNC_TIME_LIMIT_SEC = 60 * 60 * 6
 
 # An instantiated derivative of werkzeug.contrib.cache.BaseCache
 # if enabled, it can be used to store the results of long-running queries
