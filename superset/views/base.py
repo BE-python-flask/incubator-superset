@@ -112,7 +112,7 @@ def json_response(message='', status=200, data=None, code=0):
             'message': message,
             'data': data}
     return Response(
-        json.dumps(resp, default=utils.json_iso_dttm_ser),
+        json.dumps(resp, default=utils.json_iso_dttm_ser, ensure_ascii=False),
         status=status,
         mimetype="application/json"
     )
