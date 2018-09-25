@@ -11,6 +11,9 @@ from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
 from flask_appbuilder.models.sqla.interface import SQLAInterface
+from flask_cors import cross_origin
+from flask_login import login_user, current_user
+from jpype import JClass
 import sqlalchemy as sqla
 from sqlalchemy import and_, create_engine, update
 import simplejson as json
@@ -2251,6 +2254,53 @@ def healthcheck():
 @app.route('/ping')
 def ping():
     return 'OK'
+
+
+@app.route('/cros_login/', methods=['POST'])
+@cross_origin(supports_credentials=True)
+def cros_login():
+    def add_or_edit_user(username, password, appbuilder):
+        from werkzeug.security import check_password_hash
+        user = appbuilder.sm.find_user(username=username)
+        if not user:
+            user = appbuilder.sm.add_user(
+                username, username, username, '{}@transwarp.io'.format(username),
+                appbuilder.sm.find_role('Admin'),  password=password)
+            if not user:
+                raise Exception('Guardian auth success, but create new user failed')
+        elif not check_password_hash(user.password, password):
+            appbuilder.sm.reset_password(user.id, password)
+        user.password2 = password
+        appbuilder.sm.get_session.commit()
+        return user
+
+    username = request.form.get('username')
+    password = request.form.get('password')
+    if not username:
+        return Response('username is none', status=400)
+    if not password:
+        return Response('password is none', status=400)
+
+    if config.get('CAS_AUTH') is True:
+        return Response("Not realize cros login when turned on cas", status=500)
+    elif config.get('GUARDIAN_AUTH') is True:
+        try:
+            client_factory = JClass('io.transwarp.guardian.client.GuardianClientFactory')
+            client = client_factory.getInstance()
+            client.authenticate(username, password)
+            add_or_edit_user(username, password, appbuilder)
+        except Exception as e:
+            return Response("Error occurs when authenticating by guardian: " + str(e))
+
+    user = appbuilder.sm.auth_user_db(username, password)
+    if user:
+        login_user(user, remember=False)
+        if current_user.is_authenticated():
+            return Response("Logged in '{}'".format(username))
+        else:
+            return Response("Not logged in '{}'".format(username), status=400)
+    else:
+        return Response("username or password is incorrect", status=400)
 
 
 @app.after_request
