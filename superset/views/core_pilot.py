@@ -1085,12 +1085,13 @@ class Superset(BaseSupersetView, PermissionManagement):
         dash.params = original_dash.params
 
         self._set_dash_metadata(dash, data)
+        view = DashboardModelView()
+        view.pre_add(dash)
         session.add(dash)
         session.commit()
-        dash_json = dash.json_data
-        self.grant_owner_perms(dash.guardian_datasource())
-        Number.log_number(g.user.username, Dashboard.model_type)
-        Log.log_add(dash, Dashboard.model_type, g.user.id)
+        view.post_add(dash)
+
+        dash_json = json.dumps(dash.data)
         return json_success(dash_json)
 
     @expose("/save_dash/<dashboard_id>/", methods=['GET', 'POST'])
