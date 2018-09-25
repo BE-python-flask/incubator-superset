@@ -68,6 +68,8 @@ class ExploreChartHeader extends React.PureComponent {
 
   render() {
     const formData = this.props.form_data;
+    const slice_editProperties = window.featureToggles.slice_editProperties.show;
+
     const {
       chartStatus,
       chartUpdateEndTime,
@@ -95,7 +97,7 @@ class ExploreChartHeader extends React.PureComponent {
             isStarred={this.props.isStarred}
           />
 
-          <TooltipWrapper
+          {slice_editProperties && <TooltipWrapper
             label="edit-desc"
             tooltip={t('Edit chart properties')}
           >
@@ -105,7 +107,7 @@ class ExploreChartHeader extends React.PureComponent {
             >
               <i className="fa fa-edit" />
             </a>
-          </TooltipWrapper>
+          </TooltipWrapper>}
         </span>
         }
         {this.props.chart.sliceFormData &&
