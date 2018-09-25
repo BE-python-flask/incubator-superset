@@ -38,7 +38,7 @@
     "HDFS_ARGS": "",
 
     "INCEPTOR_STR": "如果认证方式是LDAP，需要加上用户名和密码",
-    "INCEPTOR_ARGS": "ODBC连接串的参数。（1）keytab文件通过Guardian获取；（2）支持LDAP认证，连接串需要添加用户名和密码",
+    "INCEPTOR_ARGS": "ODBC连接串的参数。（1）如果mech=LDAP，连接串需要添加用户名和密码；（2）如果mech=Kerberos，a.不需要添加'keytab'参数，由系统获取keytab文件, b.'kuser'为当前用户的user principal, c.'fqdn'为Kerberos服务所在节点的主机名。如果是TDC平台，'fqdn'值为固定的'tos'。（3）如果mech=Token，不添加参数'guardianToken'的时候，将由后端获取。",
     "INCEPTOR_HTTPFS": "",
     "INCEPTOR_DEFAULTINCCONNECT": "",
 

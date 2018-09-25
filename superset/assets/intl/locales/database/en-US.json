@@ -38,7 +38,7 @@
     "HDFS_ARGS": "",
 
     "INCEPTOR_STR": "If it's LDAP，need to add account info",
-    "INCEPTOR_ARGS": "ODBC connection params: （1）Get keytab from Guardian；（2）LDAP certification compatible，dataset must have account info",
+    "INCEPTOR_ARGS": "ODBC connection params: （1）If mech=LDAP, should fill username and password in Uri; (2) If mech=Kerberos, a. param 'keytab' will be added at backend, b. 'kuser' is the principal of present user, c. 'fqdn' is the hostname of Kerberos server on, and is constant 'tos' if platform is TDC; (3) If mech=Token, 'guardianToken' will be added at backend if you do not add it.",
     "INCEPTOR_HTTPFS": "",
     "INCEPTOR_DEFAULTINCCONNECT": "",
 
