@@ -39,6 +39,7 @@ PILOT_WEBSERVER_PORT = 8086
 PILOT_WEBSERVER_TIMEOUT = 600
 
 CUSTOM_SECURITY_MANAGER = None
+SQLALCHEMY_TRACK_MODIFICATIONS = False
 # ---------------------------------------------------------
 
 # The default username and password when guardian is not opened
@@ -98,12 +99,6 @@ FILE_ROBOT_SERVER = 'localhost:5005'
 # Timeout for database or hdfs connection
 CONNECTION_TIMEOUT = 60
 
-# Timeout duration for SQL Lab synchronous queries
-SQLLAB_TIMEOUT = 300
-
-# Maximum number of rows returned in the SQL editor
-SQL_MAX_ROW = 20
-
 # The limit of queries fetched for query search
 QUERY_SEARCH_LIMIT = 100
 
@@ -112,7 +107,14 @@ SLICE_ROW_LIMIT = 2000
 
 
 # Flask-WTF flag for CSRF
-CSRF_ENABLED = True
+WTF_CSRF_ENABLED = True
+
+# Add endpoints that need to be exempt from CSRF protection
+WTF_CSRF_EXEMPT_LIST = []
+
+# Whether to run the web server in debug mode or not
+DEBUG = False
+FLASK_USE_RELOAD = True
 
 # Whether to show the stacktrace on 500 error
 SHOW_STACKTRACE = True
@@ -147,12 +149,19 @@ AUTH_TYPE = AUTH_DB
 # Setup default language
 BABEL_DEFAULT_LOCALE = 'zh'
 # Your application default translation path
-BABEL_DEFAULT_FOLDER = 'babel/translations'
+BABEL_DEFAULT_FOLDER = 'superset/translations'
 # The allowed translation for you app
 LANGUAGES = {
-    'en': {'flag': 'us', 'name': 'English', 'value': 'en-US'},
-    'zh': {'flag': 'cn', 'name': 'Chinese', 'value': 'zh-CN'},
+    'en': {'flag': 'us', 'name': 'English'},
+    # 'it': {'flag': 'it', 'name': 'Italian'},
+    # 'fr': {'flag': 'fr', 'name': 'French'},
+    'zh': {'flag': 'cn', 'name': 'Chinese'},
+    # 'ja': {'flag': 'jp', 'name': 'Japanese'},
+    # 'de': {'flag': 'de', 'name': 'German'},
+    # 'pt_BR': {'flag': 'br', 'name': 'Brazilian Portuguese'},
+    # 'ru': {'flag': 'ru', 'name': 'Russian'},
 }
+
 # ---------------------------------------------------
 # Image and file configuration
 # ---------------------------------------------------
@@ -189,6 +198,9 @@ TABLE_NAMES_CACHE_CONFIG = {'CACHE_TYPE': 'null'}
 ENABLE_CORS = False
 CORS_OPTIONS = {}
 
+# Allowed format types for upload on Database view
+# TODO: Add processing of other spreadsheet formats (xls, xlsx etc)
+ALLOWED_EXTENSIONS = set(['csv'])
 
 # CSV Options: key/value pairs that will be passed as argument to DataFrame.to_csv method
 # note: index option should not be overridden
@@ -203,6 +215,10 @@ CSV_EXPORT = {
 # ---------------------------------------------------
 VIZ_TYPE_BLACKLIST = []
 
+# ---------------------------------------------------
+# List of data sources not to be refreshed in druid cluster
+# ---------------------------------------------------
+DRUID_DATA_SOURCE_BLACKLIST = []
 
 # --------------------------------------------------
 # Modules, datasources and middleware to be registered
@@ -236,6 +252,28 @@ BACKUP_COUNT = 30
 MAPBOX_API_KEY = "pk.eyJ1IjoiemhhbmdqaWFqaWUiLCJhIjoiY2o0NnFzb29hMDNzZTMzbzE0a2lrd2FvZiJ9.GajDhKuG9zZb2_g0DaEtJw"
 
 
+# ---------------------------------------------------
+# SQL Lab
+# ---------------------------------------------------
+# Timeout duration for SQL Lab synchronous queries
+SQLLAB_TIMEOUT = 300
+
+# Maximum number of rows returned in the SQL editor
+SQL_MAX_ROW = 20
+
+# The MAX duration (in seconds) a query can run for before being killed
+# by celery.
+SQLLAB_ASYNC_TIME_LIMIT_SEC = 60 * 60 * 6
+
+# Maximum number of tables/views displayed in the dropdown window in SQL Lab.
+MAX_TABLE_NAMES = 3000
+
+# An instantiated derivative of werkzeug.contrib.cache.BaseCache
+# if enabled, it can be used to store the results of long-running queries
+# in SQL Lab by using the "Run Async" button/feature
+RESULTS_BACKEND = None
+
+
 # If defined, shows this text in an alert-warning box in the navbar
 # one example use case may be "STAGING" to make it clear that this is
 # not the production version of the site.
@@ -258,19 +296,24 @@ SQL_CELERY_DB_FILE_PATH = os.path.join(DATA_DIR, 'celerydb.sqlite')
 SQL_CELERY_RESULTS_DB_FILE_PATH = os.path.join(DATA_DIR, 'celery_results.sqlite')
 
 # static http headers to be served by your Superset server.
-# The following example prevents iFrame from other domains
-# and "clickjacking" as a result
-# HTTP_HEADERS = {'X-Frame-Options': 'SAMEORIGIN'}
-HTTP_HEADERS = {}
+# This header prevents iFrames from other domains and
+# "clickjacking" as a result
+HTTP_HEADERS = {'X-Frame-Options': 'SAMEORIGIN'}
+# If you need to allow iframes from other domains (and are
+# aware of the risks), you can disable this header:
+# HTTP_HEADERS = {}
 
-# The MAX duration (in seconds) a query can run for before being killed
-# by celery.
-SQLLAB_ASYNC_TIME_LIMIT_SEC = 60 * 60 * 6
+# The S3 bucket where you want to store your external hive tables created
+# from CSV files. For example, 'companyname-superset'
+CSV_TO_HIVE_UPLOAD_S3_BUCKET = None
 
-# An instantiated derivative of werkzeug.contrib.cache.BaseCache
-# if enabled, it can be used to store the results of long-running queries
-# in SQL Lab by using the "Run Async" button/feature
-RESULTS_BACKEND = None
+# The directory within the bucket specified above that will
+# contain all the external tables
+CSV_TO_HIVE_UPLOAD_DIRECTORY = 'EXTERNAL_HIVE_TABLES/'
+
+# The namespace within hive where the tables created from
+# uploading CSVs will be stored.
+UPLOADED_CSV_HIVE_NAMESPACE = None
 
 # A dictionary of items that gets merged into the Jinja context for
 # SQL Lab. The existing context gets updated with this dictionary,
