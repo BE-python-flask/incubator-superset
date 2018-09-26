@@ -217,3 +217,10 @@
   text-align: center;
   margin-top: 60px;
 }
+
+.save-radio{
+  width: 100%;
+  height: auto;
+  border: none;
+  background: none;
+}
