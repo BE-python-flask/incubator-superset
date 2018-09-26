@@ -36,6 +36,11 @@
     "path": "pilot",
     "_path": "superset"
   },
+  "slice_editProperties": {
+    "show": false,
+    "version": "v1",
+    "path": "superset"
+  },
 
   "_source": {},
   "source": {

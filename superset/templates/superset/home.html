@@ -6,6 +6,11 @@
   {% endif %}
 {% endblock %}
 
+{% block head_css %}
+	{{ super() }}
+<link rel="stylesheet" type="text/css" href="{{ js_manifest('home' + '.css') }}" />
+{% endblock %}
+
 {% block body %}
 <div class="container welcome">
   {% include 'superset/flash_wrapper.html' %}
