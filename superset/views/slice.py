@@ -375,7 +375,8 @@ class SliceAsync(SupersetSliceModelView):  # noqa
 
 class SliceAddView(SupersetSliceModelView):  # noqa
     list_columns = [
-        'id', 'slice_name', 'slice_link', 'viz_type',
-        'datasource_link', 'owners', 'modified', 'changed_on']
-    show_columns = list(set(SupersetSliceModelView.edit_columns + list_columns))
+        'id', 'slice_name', 'slice_url', 'edit_url', 'viz_type', 'params',
+        'description', 'description_markeddown', 'datasource_id', 'datasource_type',
+        'datasource_name_text', 'datasource_link',
+        'owners', 'modified', 'changed_on']
 

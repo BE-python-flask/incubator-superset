@@ -117,10 +117,15 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
             # add default_filters to the preselect_filters of dashboard
             json_metadata = json.loads(self.json_metadata)
             default_filters = json_metadata.get('default_filters')
-            if default_filters:
-                filters = parse.quote(default_filters.encode('utf8'))
-                return '/superset/dashboard/{}/?preselect_filters={}'.format(
-                    self.slug or self.id, filters)
+            # make sure default_filters is not empty and is valid
+            if default_filters and default_filters != '{}':
+                try:
+                    if json.loads(default_filters):
+                        filters = parse.quote(default_filters.encode('utf8'))
+                        return '/superset/dashboard/{}/?preselect_filters={}'.format(
+                            self.slug or self.id, filters)
+                except Exception:
+                    pass
         return '/superset/dashboard/{}/'.format(self.id)
 
     @property
@@ -174,7 +179,8 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
         """
         def alter_positions(dashboard, old_to_new_slc_id_dict):
             """ Updates slice_ids in the position json.
-            Sample position json:
+
+            Sample position json v1:
             [{
                 "col": 5,
                 "row": 10,
@@ -182,15 +188,59 @@ class Dashboard(Model, AuditMixinNullable, ImportMixin):
                 "size_y": 2,
                 "slice_id": "3610"
             }]
+
+            Sample position json v2:
+            {
+                "DASHBOARD_VERSION_KEY": "v2",
+                "DASHBOARD_ROOT_ID": {
+                    "type": "DASHBOARD_ROOT_TYPE",
+                    "id": "DASHBOARD_ROOT_ID",
+                    "children": ["DASHBOARD_GRID_ID"]
+                },
+                "DASHBOARD_GRID_ID": {
+                    "type": "DASHBOARD_GRID_TYPE",
+                    "id": "DASHBOARD_GRID_ID",
+                    "children": ["DASHBOARD_CHART_TYPE-2"]
+                },
+                "DASHBOARD_CHART_TYPE-2": {
+                    "type": "DASHBOARD_CHART_TYPE",
+                    "id": "DASHBOARD_CHART_TYPE-2",
+                    "children": [],
+                    "meta": {
+                        "width": 4,
+                        "height": 50,
+                        "chartId": 118
+                    }
+                },
+            }
             """
-            position_array = dashboard.position_array
-            for position in position_array:
-                if 'slice_id' in position:
+            position_data = json.loads(dashboard.position_json)
+            is_v2_dash = (
+                isinstance(position_data, dict) and
+                position_data.get('DASHBOARD_VERSION_KEY') == 'v2'
+            )
+            if is_v2_dash:
+                position_json = position_data.values()
+                for value in position_json:
+                    if (isinstance(value, dict) and value.get('meta') and
+                            value.get('meta').get('chartId')):
+                        old_slice_id = value.get('meta').get('chartId')
+
+                        if old_slice_id in old_to_new_slc_id_dict:
+                            value['meta']['chartId'] = (
+                                old_to_new_slc_id_dict[old_slice_id]
+                            )
+                dashboard.position_json = json.dumps(position_data)
+            else:
+                position_array = dashboard.position_array
+                for position in position_array:
+                    if 'slice_id' not in position:
+                        continue
                     old_slice_id = int(position['slice_id'])
                     if old_slice_id in old_to_new_slc_id_dict:
-                        position['slice_id'] = \
-                            '{}'.format(old_to_new_slc_id_dict[old_slice_id])
-            dashboard.position_json = json.dumps(position_array)
+                        position['slice_id'] = '{}'.format(
+                            old_to_new_slc_id_dict[old_slice_id])
+                dashboard.position_json = json.dumps(position_array)
 
         slices = copy(i_dash.slices)
         old_to_new_slc_id_dict = {}

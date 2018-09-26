@@ -112,6 +112,11 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         datasource = self.datasource
         return datasource.link if datasource else None
 
+    def datasource_name_text(self):
+        # pylint: disable=no-member
+        datasource = self.datasource
+        return datasource.name if datasource else None
+
     @property
     def datasource_edit_url(self):
         # pylint: disable=no-member
@@ -141,15 +146,18 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         except Exception as e:
             logging.exception(e)
             d['error'] = str(e)
-        d['slice_id'] = self.id
-        d['slice_name'] = self.slice_name
-        d['slice_url'] = self.slice_url
-        d['edit_url'] = self.edit_url
-        d['datasource'] = self.datasource_name
-        d['form_data'] = self.form_data
-        d['description'] = self.description
-        d['description_markeddown'] = self.description_markeddown
-        return d
+        return {
+            'datasource': self.datasource_name,
+            'description': self.description,
+            'description_markeddown': self.description_markeddown,
+            'edit_url': self.edit_url,
+            'form_data': self.form_data,
+            'slice_id': self.id,
+            'slice_name': self.slice_name,
+            'slice_url': self.slice_url,
+            'modified': self.modified(),
+            'changed_on': self.changed_on.isoformat(),
+        }
 
     @property
     def json_data(self):
