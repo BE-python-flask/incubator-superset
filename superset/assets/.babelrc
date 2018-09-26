@@ -25,10 +25,7 @@
     "transform-export-extensions",
     "transform-decorators-legacy",
     "transform-class-properties",
-    ["import", {
-      libraryName: "antd",
-      style: "css"
-    }],
+    ["import", { "libraryName": "antd", "libraryDirectory": "es", "style": "css" }],
     ["transform-runtime", {
       "polyfill": false,
       "regenerator": true
