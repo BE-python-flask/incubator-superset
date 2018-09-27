@@ -73,14 +73,14 @@ appbuilder.add_view(
     icon="fa-list-ol")
 
 appbuilder.add_view(            # superset menu
-    dashboard.SupersetDashboardModelView,
+    dashboard.DashboardModelView,
     'Dashboards',
     label=__('Dashboard_Superset'),
     icon='fa-dashboard',
     category='Dashboard',
     category_icon='')
 appbuilder.add_view(
-    dashboard.DashboardModelView,
+    dashboard.PilotDashboardModelView,
     'Dashboards',
     label=__('Dashboard_Pilot'),
     icon='fa-dashboard',
