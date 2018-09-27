@@ -24,7 +24,7 @@ config = app.config
 QueryStatus = utils.QueryStatus
 
 
-class SupersetSliceModelView(SupersetModelView, DeleteMixin):  # noqa
+class SliceModelView(SupersetModelView, DeleteMixin):  # noqa
     datamodel = SQLAInterface(Slice)
 
     list_title = _('List Charts')
@@ -73,7 +73,7 @@ class SupersetSliceModelView(SupersetModelView, DeleteMixin):  # noqa
         )
 
 
-class SliceModelView(PilotModelView, PermissionManagement):
+class PilotSliceModelView(PilotModelView, PermissionManagement):
     model = Slice
     model_type = model.model_type
     datamodel = SQLAInterface(Slice)
@@ -100,12 +100,12 @@ class SliceModelView(PilotModelView, PermissionManagement):
     str_columns = ['datasource', 'created_on', 'changed_on']
 
     def get_show_attributes(self, obj, user_id=None):
-        attributes = super(SliceModelView, self).get_show_attributes(obj, user_id)
+        attributes = super(PilotSliceModelView, self).get_show_attributes(obj, user_id)
         attributes['dashboards'] = self.dashboards_to_dict(obj.dashboards)
         return attributes
 
     def get_edit_attributes(self, data, user_id):
-        attributes = super(SliceModelView, self).get_edit_attributes(data, user_id)
+        attributes = super(PilotSliceModelView, self).get_edit_attributes(data, user_id)
         attributes['dashboards'] = self.get_dashs_in_list(data.get('dashboards'))
         return attributes
 
@@ -120,7 +120,7 @@ class SliceModelView(PilotModelView, PermissionManagement):
         return objs
 
     def post_delete(self, obj):
-        super(SliceModelView, self).post_delete(obj)
+        super(PilotSliceModelView, self).post_delete(obj)
         db.session.query(FavStar) \
             .filter(FavStar.class_name.ilike(self.model_type),
                     FavStar.obj_id == obj.id) \
@@ -363,7 +363,7 @@ class SliceModelView(PilotModelView, PermissionManagement):
         return response
 
 
-class SliceAsync(SupersetSliceModelView):  # noqa
+class SliceAsync(SliceModelView):  # noqa
     list_columns = [
         'id', 'slice_link', 'viz_type', 'slice_name',
         'creator', 'modified', 'icons']
@@ -373,7 +373,7 @@ class SliceAsync(SupersetSliceModelView):  # noqa
     }
 
 
-class SliceAddView(SupersetSliceModelView):  # noqa
+class SliceAddView(SliceModelView):  # noqa
     list_columns = [
         'id', 'slice_name', 'slice_url', 'edit_url', 'viz_type', 'params',
         'description', 'description_markeddown', 'datasource_id', 'datasource_type',
