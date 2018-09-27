@@ -150,7 +150,8 @@ class SaveModal extends React.Component {
               disabled={!this.props.can_overwrite}
               checked={this.state.action === 'overwrite'}
               onChange={this.changeAction.bind(this, 'overwrite')}
-            >
+              className='save-radio'
+              >
               {t('Overwrite chart %s', this.props.slice.slice_name)}
             </Radio>
           }
@@ -160,20 +161,21 @@ class SaveModal extends React.Component {
             inline
             checked={this.state.action === 'saveas'}
             onChange={this.changeAction.bind(this, 'saveas')}
-          > {t('Save as')} &nbsp;
+            > {t('Save as')} &nbsp;
           </Radio>
           <input
             name="new_slice_name"
             placeholder={t('[chart name]')}
             onChange={this.onChange.bind(this, 'newSliceName')}
             onFocus={this.changeAction.bind(this, 'saveas')}
-          />
+            />
 
 
           <br />
           <hr />
 
           <Radio
+            className='save-radio'
             checked={this.state.addToDash === 'noSave'}
             onChange={this.changeDash.bind(this, 'noSave')}
           >
