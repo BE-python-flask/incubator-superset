@@ -11,8 +11,7 @@ from flask_appbuilder.forms import DynamicForm
 from flask_babel import lazy_gettext as _
 from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import (
-    BooleanField, Field, IntegerField, SelectField, StringField
-)
+    BooleanField, Field, IntegerField, SelectField, StringField)
 from wtforms.ext.sqlalchemy.fields import QuerySelectField
 from wtforms.validators import DataRequired, NumberRange, Optional
 
@@ -50,8 +49,7 @@ def filter_not_empty_values(value):
 
 class CsvToDatabaseForm(DynamicForm):
     # pylint: disable=E0211
-    @classmethod
-    def all_db_items(cls):
+    def all_db_items():
         return db.session.query(Database)
 
     name = StringField(

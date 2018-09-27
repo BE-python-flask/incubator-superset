@@ -811,7 +811,7 @@ class CsvToDatabaseView(SimpleFormView):
         try:
             utils.ensure_path_exists(config['UPLOAD_FOLDER'])
             csv_file.save(path)
-            table = Dataset(table_name=form.name.data)
+            table = Dataset(dataset_name=form.name.data, table_name=form.name.data)
             table.database = form.data.get('con')
             table.database_id = table.database.id
             table.database.db_engine_spec.create_table_from_csv(form, table)
@@ -831,7 +831,7 @@ class CsvToDatabaseView(SimpleFormView):
         message = _('CSV file "{0}" uploaded to table "{1}" in database "{2}"'
                     .format(csv_filename, form.name.data, db_name))
         flash(message, 'info')
-        return redirect('/tablemodelview/list/')
+        return redirect('/table/list/')
 
 
 class DatabaseTablesAsync(SupersetDatabaseView):
