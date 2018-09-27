@@ -32,7 +32,7 @@ from .base import (
 config = app.config
 
 
-class SupersetDatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
+class DatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # noqa
     datamodel = SQLAInterface(models.Database)
 
     list_title = _('List Databases')
@@ -102,7 +102,7 @@ class SupersetDatabaseView(SupersetModelView, DeleteMixin, YamlExportMixin):  # 
         DeleteMixin._delete(self, pk)
 
 
-class DatabaseView(PilotModelView, PermissionManagement):  # noqa
+class PilotDatabaseView(PilotModelView, PermissionManagement):  # noqa
     model = models.Database
     model_type = model.model_type
     datamodel = SQLAInterface(models.Database)
@@ -135,7 +135,7 @@ class DatabaseView(PilotModelView, PermissionManagement):  # noqa
     def pre_update(self, old_obj, new_obj):
         if old_obj.database_name == config.get('DEFAULT_INCEPTOR_CONN_NAME'):
             raise PermissionException(CANNOT_EDIT_DEFAULT_CONN)
-        super(DatabaseView, self).pre_update(old_obj, new_obj)
+        super(PilotDatabaseView, self).pre_update(old_obj, new_obj)
 
     def check_column_values(self, obj):
         if not obj.database_name:
@@ -147,7 +147,7 @@ class DatabaseView(PilotModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION_ARGS)
 
     def get_list_args(self, args):
-        kwargs = super(DatabaseView, self).get_list_args(args)
+        kwargs = super(PilotDatabaseView, self).get_list_args(args)
         kwargs['database_type'] = args.get('database_type')
         return kwargs
 
@@ -779,7 +779,7 @@ class ConnectionView(BaseSupersetView, PageMixin, PermissionManagement):
         }
 
 
-class DatabaseAsync(SupersetDatabaseView):
+class DatabaseAsync(DatabaseView):
     list_columns = [
         'id', 'database_name',
         'expose', 'allow_ctas', 'force_ctas_schema',
@@ -811,7 +811,7 @@ class CsvToDatabaseView(SimpleFormView):
         try:
             utils.ensure_path_exists(config['UPLOAD_FOLDER'])
             csv_file.save(path)
-            table = Dataset(table_name=form.name.data)
+            table = Dataset(dataset_name=form.name.data, table_name=form.name.data)
             table.database = form.data.get('con')
             table.database_id = table.database.id
             table.database.db_engine_spec.create_table_from_csv(form, table)
@@ -831,8 +831,8 @@ class CsvToDatabaseView(SimpleFormView):
         message = _('CSV file "{0}" uploaded to table "{1}" in database "{2}"'
                     .format(csv_filename, form.name.data, db_name))
         flash(message, 'info')
-        return redirect('/tablemodelview/list/')
+        return redirect('/table/list/')
 
 
-class DatabaseTablesAsync(SupersetDatabaseView):
+class DatabaseTablesAsync(DatabaseView):
     list_columns = ['id', 'all_table_names', 'all_schema_names']

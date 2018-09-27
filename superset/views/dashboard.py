@@ -64,7 +64,7 @@ class DashboardFilter(SupersetFilter):
         return query
 
 
-class SupersetDashboardModelView(SupersetModelView, DeleteMixin):  # noqa
+class DashboardModelView(SupersetModelView, DeleteMixin):  # noqa
     datamodel = SQLAInterface(Dashboard)
 
     list_title = _('List Dashboards')
@@ -138,7 +138,7 @@ class SupersetDashboardModelView(SupersetModelView, DeleteMixin):  # noqa
         )
 
 
-class DashboardModelView(PilotModelView, PermissionManagement):
+class PilotDashboardModelView(PilotModelView, PermissionManagement):
     model = Dashboard
     model_type = model.model_type
     datamodel = SQLAInterface(Dashboard)
@@ -170,7 +170,7 @@ class DashboardModelView(PilotModelView, PermissionManagement):
         self.pre_add(new_obj)
 
     def post_delete(self, obj):
-        super(DashboardModelView, self).post_delete(obj)
+        super(PilotDashboardModelView, self).post_delete(obj)
         db.session.query(FavStar) \
             .filter(FavStar.class_name.ilike(self.model_type),
                     FavStar.obj_id == obj.id) \
@@ -251,17 +251,20 @@ class DashboardModelView(PilotModelView, PermissionManagement):
         return response
 
     def get_show_attributes(self, obj, user_id=None):
-        attributes = super(DashboardModelView, self).get_show_attributes(obj)
+        attributes = \
+            super(PilotDashboardModelView, self).get_show_attributes(obj)
         attributes['slices'] = self.slices_to_dict(obj.slices)
         return attributes
 
     def get_add_attributes(self, data, user_id):
-        attributes = super(DashboardModelView, self).get_add_attributes(data, user_id)
+        attributes = \
+            super(PilotDashboardModelView, self).get_add_attributes(data, user_id)
         attributes['slices'] = self.get_slices_in_list(data.get('slices'))
         return attributes
 
     def get_edit_attributes(self, data, user_id):
-        attributes = super(DashboardModelView, self).get_edit_attributes(data, user_id)
+        attributes = \
+            super(PilotDashboardModelView, self).get_edit_attributes(data, user_id)
         attributes['slices'] = self.get_slices_in_list(data.get('slices'))
         attributes['need_capture'] = True
         return attributes
@@ -657,7 +660,7 @@ class DashboardModelView(PilotModelView, PermissionManagement):
         return json_response(data=tree)
 
 
-class DashboardModelViewAsync(SupersetDashboardModelView):  # noqa
+class DashboardModelViewAsync(DashboardModelView):  # noqa
     list_columns = [
         'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
@@ -670,9 +673,9 @@ class DashboardModelViewAsync(SupersetDashboardModelView):  # noqa
     }
 
 
-class DashboardAddView(SupersetDashboardModelView):  # noqa
+class DashboardAddView(DashboardModelView):  # noqa
     list_columns = [
         'id', 'dashboard_link', 'creator', 'modified', 'name',
         'changed_on', 'url', 'changed_by_name',
     ]
-    show_columns = list(set(SupersetDashboardModelView.edit_columns + list_columns))
+    show_columns = list(set(DashboardModelView.edit_columns + list_columns))

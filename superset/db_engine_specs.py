@@ -1529,6 +1529,10 @@ class InceptorEngineSpec(BaseEngineSpec):
             data = [tuple(row) for row in data]  # pyodbc.Row to tuple
         return data
 
+    @staticmethod
+    def create_table_from_csv(form, table):
+        raise NotImplementedError('Not Implemented uploading csv file to Inceptor')
+
 
 engines = {
     o.engine: o for o in globals().values()

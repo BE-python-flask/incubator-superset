@@ -73,14 +73,14 @@ appbuilder.add_view(
     icon="fa-list-ol")
 
 appbuilder.add_view(            # superset menu
-    dashboard.SupersetDashboardModelView,
+    dashboard.DashboardModelView,
     'Dashboards',
     label=__('Dashboard_Superset'),
     icon='fa-dashboard',
     category='Dashboard',
     category_icon='')
 appbuilder.add_view(
-    dashboard.DashboardModelView,
+    dashboard.PilotDashboardModelView,
     'Dashboards',
     label=__('Dashboard_Pilot'),
     icon='fa-dashboard',
@@ -91,14 +91,14 @@ appbuilder.add_view_no_menu(dashboard.DashboardAddView)
 
 
 appbuilder.add_view(        # superset menu
-    slice.SupersetSliceModelView,
+    slice.SliceModelView,
     'Slice',
     label=__('Slice_Superset'),
     icon='fa-bar-chart',
     category='Slice',
     category_icon='')
 appbuilder.add_view(
-    slice.SliceModelView,
+    slice.PilotSliceModelView,
     'Slice',
     label=__('Slice_Pilot'),
     icon='fa-bar-chart',
@@ -109,7 +109,7 @@ appbuilder.add_view_no_menu(slice.SliceAddView)
 
 
 appbuilder.add_view(            # superset menu
-    connection.SupersetDatabaseView,
+    connection.DatabaseView,
     'Databases_Superset',
     label=__('Databases_Superset'),
     icon='fa-database',
@@ -123,7 +123,7 @@ appbuilder.add_view_no_menu(connection.DatabaseTablesAsync)     # superset menu
 
 
 appbuilder.add_view(
-    connection.DatabaseView,
+    connection.PilotDatabaseView,
     'Databases_Pilot',
     label=__('Databases_Pilot'),
     icon='fa-database',
