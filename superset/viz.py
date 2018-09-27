@@ -653,7 +653,7 @@ class PivotTableViz(BaseViz):
         if (
                     any(v in groupby for v in columns) or
                     any(v in columns for v in groupby)):
-            raise Exception(_("Group By' and 'Columns' can't overlap"))
+            raise Exception(_("'Group By' and 'Columns' can't overlap"))
         return d
 
     def get_data(self, df):
