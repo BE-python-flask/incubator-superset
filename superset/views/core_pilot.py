@@ -46,10 +46,10 @@ from superset import models
 from .base import (
     BaseSupersetView, SupersetModelView, DeleteMixin, PermissionManagement,
     catch_exception, json_response, json_error_response, get_error_msg, CsvResponse,
-    generate_download_headers, get_user_roles, check_ownership
+    generate_download_headers
 )
 from .hdfs import HDFSBrowser
-from .dashboard import DashboardModelView
+from .dashboard import PilotDashboardModelView as DashboardModelView
 from .utils import bootstrap_user_data
 
 
@@ -1102,11 +1102,7 @@ class Superset(BaseSupersetView, PermissionManagement):
 
         self._set_dash_metadata(dash, data)
         view = DashboardModelView()
-        view.pre_add(dash)
-        session.add(dash)
-        session.commit()
-        view.post_add(dash)
-
+        view._add(dash)
         dash_json = json.dumps(dash.data)
         return json_success(dash_json)
 
