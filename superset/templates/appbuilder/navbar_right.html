@@ -6,7 +6,10 @@
 {% if languages.keys()|length > 1 %}
 <li class="dropdown">
     <a class="dropdown-toggle" data-toggle="dropdown" href="javascript:void(0)">
-       <div class="f16"><i class="flag {{languages[locale].get('flag')}}"></i>&nbsp;<b class="caret"></b>
+       <div
+            class="f16 original"
+            name={{languages[locale].get('value')}}
+       ><i class="flag {{languages[locale].get('flag')}}"></i>&nbsp;<b class="caret"></b>
        </div>
     </a>
     <ul class="dropdown-menu" id="language-picker">
@@ -15,7 +18,7 @@
             {% if lang != locale %}
                 <a tabindex="-1" href="{{appbuilder.get_url_for_locale(lang)}}">
                   <div
-                    class="lan-switcher"
+                    class="lan-switcher f16"
                     name={{languages[lang].get('value')}}
                   >
                     <i class="flag {{languages[lang].get('flag')}}"></i> - {{languages[lang].get('name')}}
@@ -49,6 +52,9 @@
 {% endif %}
 
 <script type="text/javascript">
+    var nm = document.querySelector('.original').getAttribute('name');
+    console.log(nm);
+    localStorage.setItem('pilot:currentLocale', nm);
     document.querySelector('.lan-switcher').addEventListener('click', function(e) {
         var lan = this.getAttribute('name');
         localStorage.setItem('pilot:currentLocale', lan);
