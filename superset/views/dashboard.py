@@ -97,7 +97,7 @@ class DashboardModelView(SupersetModelView, DeleteMixin):  # noqa
     }
 
     def pre_add(self, obj):
-        obj.slug = obj.slug.strip() or None
+        obj.slug = obj.slug.strip() if obj.slug else None
         if obj.slug:
             obj.slug = obj.slug.replace(' ', '-')
             obj.slug = re.sub(r'[^\w\-]+', '', obj.slug)
