@@ -4,7 +4,9 @@ import logging
 import copy
 from distutils.util import strtobool
 import functools
-from flask import g, request, Response, redirect, abort, flash, get_flashed_messages
+from flask import (
+    g, request, Response, redirect, abort, flash, get_flashed_messages, Markup
+)
 from flask_babel import get_locale
 from flask_babel import gettext as __
 from flask_babel import lazy_gettext as _
@@ -27,7 +29,7 @@ from superset.models import (
 from superset.message import *
 from superset.exceptions import (
     SupersetException2, LoginException, PermissionException, ParameterException,
-    DatabaseException, PropertyException
+    DatabaseException, PropertyException, SupersetException
 )
 from superset.translations.utils import get_language_pack
 
@@ -883,3 +885,10 @@ class CsvResponse(Response):
     charset = conf.get('CSV_EXPORT').get('encoding', 'utf-8')
 
 
+class DatasourceModelView(SupersetModelView):
+    def pre_delete(self, obj):
+        if obj.slices:
+            raise SupersetException(Markup(
+                'Cannot delete a datasource that has slices attached to it.'
+                "Here's the list of associated charts: " +
+                ''.join([o.slice_link for o in obj.slices])))

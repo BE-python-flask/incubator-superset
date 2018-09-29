@@ -310,7 +310,7 @@ class Dataset(Model, BaseDatasource):
         UniqueConstraint('dataset_name', name='dataset_name_uc'),
     )
 
-    baselink = "table"
+    baselink = "tablemodelview"    # for table view of superset
     column_cls = TableColumn
     metric_cls = SqlMetric
     temp_columns = []      # for creating slice with source table
