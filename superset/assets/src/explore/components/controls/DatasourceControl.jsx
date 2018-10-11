@@ -58,15 +58,17 @@ export default class DatasourceControl extends React.PureComponent {
     if (this.searchRef) {
       this.searchRef.focus();
     }
-    const url = '/superset/datasources/';
+    // const url = '/superset/datasources/';
+    const url = '/table/listdata/?page_size=1000';
+
     const that = this;
     if (!this.state.datasources) {
       $.ajax({
         type: 'GET',
         url,
         success: (data) => {
-          const datasources = data.map(ds => ({
-            rawName: ds.name,
+          const datasources = data.data.data.map(ds => ({
+            rawName: ds.dataset_name,
             connection: ds.connection,
             schema: ds.schema,
             name: (
@@ -75,10 +77,10 @@ export default class DatasourceControl extends React.PureComponent {
                 onClick={this.selectDatasource.bind(this, ds.uid)}
                 className="datasource-link"
               >
-                {ds.name}
+                {ds.dataset_name}
               </a>
             ),
-            type: ds.type,
+            type: ds.dataset_type,
           }));
 
           that.setState({ loading: false, datasources });

@@ -59,9 +59,10 @@ class SqlEditorLeftBar extends React.PureComponent {
     return $.get(url).then(data => ({ options: data.options }));
   }
   dbMutator(data) {
-    const options = data.result.map(db => ({ value: db.id, label: db.database_name }));
-    this.props.actions.setDatabases(data.result);
-    if (data.result.length === 0) {
+    const dt = data.data.data;
+    const options = dt.map(db => ({ value: db.id, label: db.database_name }));
+    this.props.actions.setDatabases(dt);
+    if (dt.length === 0) {
       this.props.actions.addAlert({
         bsStyle: 'danger',
         msg: t('It seems you don\'t have access to any database'),
@@ -153,11 +154,14 @@ class SqlEditorLeftBar extends React.PureComponent {
         <div>
           <AsyncSelect
             dataEndpoint={
+              '/database/listdata/?page_size=1000'
+            }
+/*             dataEndpoint={
               '/databaseasync/api/' +
               'read?_flt_0_expose=1&' +
               '_oc_DatabaseAsync=database_name&' +
               '_od_DatabaseAsync=asc'
-            }
+            } */
             onChange={this.onDatabaseChange.bind(this)}
             onAsyncError={() => notify.error(t('Error while fetching database list'))}
             value={this.props.queryEditor.dbId}

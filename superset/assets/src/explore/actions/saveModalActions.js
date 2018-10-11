@@ -14,14 +14,18 @@ export function fetchDashboardsFailed(userId) {
 
 export function fetchDashboards(userId) {
   return function (dispatch) {
-    const url = '/dashboardmodelviewasync/api/read?_flt_0_owners=' + userId;
+    // const url = '/dashboardmodelviewasync/api/read?_flt_0_owners=' + userId;
+    const url = '/dashboard/listdata/?page_size=1000';
     return $.ajax({
       type: 'GET',
       url,
       success: (data) => {
         const choices = [];
-        for (let i = 0; i < data.pks.length; i++) {
-          choices.push({ value: data.pks[i], label: data.result[i].dashboard_title });
+        const dt = data.data.data;
+        for (let i = 0; i < dt.length; i++) {
+        // for (let i = 0; i < data.pks.length; i++) {
+          // choices.push({ value: data.pks[i], label: data.result[i].dashboard_title });
+          choices.push({ value: dt[i]['id'], label: dt[i]['name'] });
         }
         dispatch(fetchDashboardsSucceeded(choices));
       },

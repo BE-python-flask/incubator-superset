@@ -80,7 +80,8 @@ class PilotSliceModelView(PilotModelView, PermissionManagement):
     route_base = '/slice'
     can_add = False
     list_columns = ['id', 'slice_name', 'description', 'slice_url', 'viz_type',
-                    'changed_on']
+                    'params', 'edit_url', 'datasource_id', 'datasource_type',
+                    'datasource_name_text', 'datasource_link', 'changed_on']
     edit_columns = ['slice_name', 'description']
     show_columns = ['id', 'slice_name', 'description', 'created_on', 'changed_on']
     list_template = "superset/sliceList.html"
@@ -336,8 +337,9 @@ class PilotSliceModelView(PilotModelView, PermissionManagement):
                 else:
                     line[col] = getattr(obj, col, None)
 
-            viz_type = line.get('viz_type', None)
-            viz_type = viz_verbose_names.get(viz_type) if viz_type else None
+            viz_type_en = line.get('viz_type', None)
+            viz_type = viz_verbose_names.get(viz_type_en) if viz_type_en else None
+            line['viz_type_en'] = viz_type_en
             line['viz_type'] = str(viz_type) if viz_type else None
             if obj.database_id and obj.full_table_name:
                 line['datasource'] = obj.full_table_name

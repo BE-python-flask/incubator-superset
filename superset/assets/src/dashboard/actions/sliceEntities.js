@@ -24,13 +24,15 @@ export function fetchAllSlices(userId) {
     if (sliceEntities.lastUpdated === 0) {
       dispatch(fetchAllSlicesStarted());
 
-      const uri = `/sliceaddview/api/read?_flt_0_created_by=${userId}`;
+      const uri = `/slice/listdata/?page_size=1000`;
+      // const uri = `/sliceaddview/api/read?_flt_0_created_by=${userId}`;
       return $.ajax({
         url: uri,
         type: 'GET',
         success: response => {
           const slices = {};
-          response.result.forEach(slice => {
+          // response.result.forEach(slice => {
+          response.data.data.forEach(slice => {
             let form_data = JSON.parse(slice.params);
             let datasource = form_data.datasource;
             if (!datasource) {
@@ -43,7 +45,7 @@ export function fetchAllSlices(userId) {
                 datasource,
               };
             }
-            if (['markup', 'separator'].indexOf(slice.viz_type) === -1) {
+            if (['markup', 'separator'].indexOf(slice.viz_type_en) === -1) {
               slices[slice.id] = {
                 slice_id: slice.id,
                 slice_url: slice.slice_url,
@@ -55,7 +57,7 @@ export function fetchAllSlices(userId) {
                 changed_on: new Date(slice.changed_on).getTime(),
                 description: slice.description,
                 description_markdown: slice.description_markeddown,
-                viz_type: slice.viz_type,
+                viz_type: slice.viz_type_en,
                 modified: slice.modified
                   ? slice.modified.replace(/<[^>]*>/g, '')
                   : '',

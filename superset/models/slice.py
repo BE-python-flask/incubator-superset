@@ -107,11 +107,12 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
         else:
             return None
 
-    @renders('datasource_name')
+    @property
     def datasource_link(self):
         datasource = self.datasource
-        return datasource.link if datasource else None
+        return datasource.explore_url if datasource else None
 
+    @property
     def datasource_name_text(self):
         # pylint: disable=no-member
         datasource = self.datasource
@@ -202,10 +203,6 @@ class Slice(Model, AuditMixinNullable, ImportMixin):
     @property
     def edit_url(self):
         return '/slice/edit/{}'.format(self.id)
-
-    @property
-    def edit_url(self):
-        return "/slice/edit/{}".format(self.id)
 
     @property
     def slice_link(self):

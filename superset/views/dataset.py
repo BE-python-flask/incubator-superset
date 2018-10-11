@@ -4,17 +4,15 @@ import requests
 import copy
 import time
 from datetime import datetime
-from flask import request, g, Markup, flash, redirect
+from flask import request, g
 from flask_babel import lazy_gettext as _
 from flask_appbuilder import expose
-from flask_appbuilder.actions import action
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.sqla.models import User
-from past.builtins import basestring
 
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
-from superset import app, db, security_manager
+from superset import app, db
 from superset.exceptions import (
     ParameterException, DatabaseException, HDFSException, PropertyException,
     ErrorRequestException
@@ -24,17 +22,13 @@ from superset.models import (
 )
 from superset.views.hdfs import HDFSBrowser, catch_hdfs_exception
 from superset.message import *
-from .base import (
-    PermissionManagement, PilotModelView, catch_exception, json_response,
-    DatasourceModelView, DeleteMixin, YamlExportMixin, DatasourceFilter,
-    get_datasource_exist_error_mgs
-)
-
+from .base import PermissionManagement, catch_exception, json_response
+from .base import PilotModelView as UnionModelView
 
 config = app.config
 
 
-class TableColumnInlineView(PilotModelView, PermissionManagement):  # noqa
+class TableColumnInlineView(UnionModelView, PermissionManagement):  # noqa
     model = TableColumn
     datamodel = SQLAInterface(TableColumn)
     route_base = '/tablecolumn'
@@ -100,7 +94,7 @@ class TableColumnInlineView(PilotModelView, PermissionManagement):  # noqa
         self.model.check_name(obj.column_name)
 
 
-class SqlMetricInlineView(PilotModelView, PermissionManagement):  # noqa
+class SqlMetricInlineView(UnionModelView, PermissionManagement):  # noqa
     model = SqlMetric
     datamodel = SQLAInterface(SqlMetric)
     route_base = '/sqlmetric'
@@ -164,13 +158,13 @@ class SqlMetricInlineView(PilotModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_METRIC_EXPRESSION)
 
 
-class DatasetModelView(PilotModelView, PermissionManagement):  # noqa
+class DatasetModelView(UnionModelView, PermissionManagement):  # noqa
     model = Dataset
     model_type = model.model_type
     datamodel = SQLAInterface(Dataset)
     route_base = '/table'
-    list_columns = ['id', 'dataset_name', 'dataset_type', 'explore_url',
-                    'connection', 'changed_on']
+    list_columns = ['id', 'dataset_name', 'dataset_type', 'explore_url', 'schema',
+                    'connection', 'uid', 'changed_on']
     add_columns = ['dataset_name', 'database_id', 'description', 'schema',
                    'table_name', 'sql']
     show_columns = ['id', 'dataset_type', 'dataset_name', 'database_id',
@@ -617,7 +611,7 @@ class DatasetModelView(PilotModelView, PermissionManagement):  # noqa
             raise ParameterException(NONE_CONNECTION)
 
 
-class HDFSTableModelView(PilotModelView):
+class HDFSTableModelView(UnionModelView):
     route_base = '/hdfstable'
     model = HDFSTable
     datamodel = SQLAInterface(HDFSTable)
@@ -774,153 +768,3 @@ class HDFSTableModelView(PilotModelView):
             )
         return file_path
 
-
-class TableModelView(DatasourceModelView, DeleteMixin, YamlExportMixin):  # noqa
-    datamodel = SQLAInterface(Dataset)
-
-    list_title = _('List Tables')
-    show_title = _('Show Table')
-    add_title = _('Add Table')
-    edit_title = _('Edit Table')
-
-    list_columns = ['link', 'database', 'changed_by_', 'modified']
-    order_columns = ['modified']
-    add_columns = ['dataset_name', 'database', 'schema', 'table_name']
-    edit_columns = [
-        'dataset_name', 'table_name', 'sql', 'filter_select_enabled',
-        'fetch_values_predicate', 'database', 'schema', 'description', 'owner',
-        'main_dttm_col', 'default_endpoint', 'offset', 'cache_timeout',
-        'is_sqllab_view', 'template_params',
-    ]
-    base_filters = [['id', DatasourceFilter, lambda: []]]
-    show_columns = edit_columns + ['perm', 'slices']
-    related_views = [TableColumnInlineView, SqlMetricInlineView]
-    base_order = ('changed_on', 'desc')
-    search_columns = (
-        'database', 'schema', 'table_name', 'owner', 'is_sqllab_view',
-    )
-    description_columns = {
-        'slices': _(
-            'The list of charts associated with this table. By '
-            'altering this datasource, you may change how these associated '
-            'charts behave. '
-            'Also note that charts need to point to a datasource, so '
-            'this form will fail at saving if removing charts from a '
-            'datasource. If you want to change the datasource for a chart, '
-            "overwrite the chart from the 'explore view'"),
-        'offset': _('Timezone offset (in hours) for this datasource'),
-        'table_name': _(
-            'Name of the table that exists in the source database'),
-        'schema': _(
-            'Schema, as used only in some databases like Postgres, Redshift '
-            'and DB2'),
-        'description': Markup(
-            'Supports <a href="https://daringfireball.net/projects/markdown/">'
-            'markdown</a>'),
-        'sql': _(
-            'This fields acts a Superset view, meaning that Superset will '
-            'run a query against this string as a subquery.',
-        ),
-        'fetch_values_predicate': _(
-            'Predicate applied when fetching distinct value to '
-            'populate the filter control component. Supports '
-            'jinja template syntax. Applies only when '
-            '`Enable Filter Select` is on.',
-        ),
-        'default_endpoint': _(
-            'Redirects to this endpoint when clicking on the table '
-            'from the table list'),
-        'filter_select_enabled': _(
-            "Whether to populate the filter's dropdown in the explore "
-            "view's filter section with a list of distinct values fetched "
-            'from the backend on the fly'),
-        'is_sqllab_view': _(
-            "Whether the table was generated by the 'Visualize' flow "
-            'in SQL Lab'),
-        'template_params': _(
-            'A set of parameters that become available in the query using '
-            'Jinja templating syntax'),
-    }
-    label_columns = {
-        'slices': _('Associated Charts'),
-        'link': _('Table'),
-        'changed_by_': _('Changed By'),
-        'database': _('Database'),
-        'changed_on_': _('Last Changed'),
-        'filter_select_enabled': _('Enable Filter Select'),
-        'schema': _('Schema'),
-        'default_endpoint': _('Default Endpoint'),
-        'offset': _('Offset'),
-        'cache_timeout': _('Cache Timeout'),
-        'table_name': _('Table Name'),
-        'fetch_values_predicate': _('Fetch Values Predicate'),
-        'owner': _('Owner'),
-        'main_dttm_col': _('Main Datetime Column'),
-        'description': _('Description'),
-        'is_sqllab_view': _('SQL Lab View'),
-        'template_params': _('Template parameters'),
-    }
-
-    def pre_add(self, table):
-        with db.session.no_autoflush:
-            table_query = db.session.query(Dataset).filter(
-                Dataset.table_name == table.table_name,
-                Dataset.schema == table.schema,
-                Dataset.database_id == table.database.id)
-            if db.session.query(table_query.exists()).scalar():
-                raise Exception(
-                    get_datasource_exist_error_mgs(table.full_name))
-
-        # Fail before adding if the table can't be found
-        try:
-            table.get_sqla_table_object()
-        except Exception:
-            raise Exception(_(
-                'Table [{}] could not be found, '
-                'please double check your '
-                'database connection, schema, and '
-                'table name').format(table.name))
-
-    def post_add(self, table, flash_message=True):
-        table.fetch_metadata()
-        security_manager.merge_perm('datasource_access', table.get_perm())
-        if table.schema:
-            security_manager.merge_perm('schema_access', table.schema_perm)
-
-        if flash_message:
-            flash(_(
-                'The table was created. '
-                'As part of this two phase configuration '
-                'process, you should now click the edit button by '
-                'the new table to configure it.'), 'info')
-
-    def post_update(self, table):
-        self.post_add(table, flash_message=False)
-
-    def _delete(self, pk):
-        DeleteMixin._delete(self, pk)
-
-    @expose('/edit/<pk>', methods=['GET', 'POST'])
-    #@has_access
-    def edit(self, pk):
-        """Simple hack to redirect to explore view after saving"""
-        resp = super(TableModelView, self).edit(pk)
-        if isinstance(resp, basestring):
-            return resp
-        return redirect('/superset/explore/table/{}/'.format(pk))
-
-    @action(
-        'refresh',
-        _('Refresh Metadata'),
-        _('Refresh column metadata'),
-        'fa-refresh')
-    def refresh(self, tables):
-        if not isinstance(tables, list):
-            tables = [tables]
-        for t in tables:
-            t.fetch_metadata()
-        msg = _(
-            'Metadata refreshed for the following table(s): %(tables)s',
-            tables=', '.join([t.table_name for t in tables]))
-        flash(msg, 'info')
-        return redirect('/tablemodelview/list/')
