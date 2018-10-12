@@ -13,6 +13,7 @@ from flask_appbuilder.baseviews import expose
 from flask_caching import Cache
 from flask_migrate import Migrate
 from flask_compress import Compress
+from flask_wtf.csrf import CSRFProtect
 from superset.cas import CAS, login_required
 from superset.cas.cas_session import cas_session
 from superset.cas.keys import (
@@ -117,6 +118,11 @@ if not database_exists(conf.get("SQLALCHEMY_DATABASE_URI")):
 
 db = SQLA(app)
 
+if conf.get('WTF_CSRF_ENABLED'):
+    csrf = CSRFProtect(app)
+    csrf_exempt_list = conf.get('WTF_CSRF_EXEMPT_LIST', [])
+    for ex in csrf_exempt_list:
+        csrf.exempt(ex)
 
 utils.pessimistic_connection_handling(db.engine.pool)
 
