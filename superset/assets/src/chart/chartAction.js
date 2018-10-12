@@ -127,11 +127,18 @@ export function addChart(chart, key) {
 export const RUN_QUERY = 'RUN_QUERY';
 export function runQuery(formData, force = false, timeout = 60, key) {
   return (dispatch) => {
-    const { url, payload } = getExploreUrlAndPayload({
+
+    const res = getExploreUrlAndPayload({
       formData,
       endpointType: 'json',
       force,
     });
+    // TODO: confirm if need to do below logic
+    if (!res) {
+      return;
+    }
+
+    const { url, payload } = res;
     const logStart = Logger.getTimestamp();
     const queryRequest = $.ajax({
       type: 'POST',

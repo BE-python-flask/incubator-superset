@@ -3,6 +3,7 @@
  */
 import fetch from 'isomorphic-fetch';
 import intl from "react-intl-universal";
+import { initJQueryAjax } from '../../modules/utils';
 
 import { renderLoadingModal, renderGlobalErrorMsg, PILOT_PREFIX } from '../../utils/utils';
 import { getNewDashboard, getSelectedSlices } from '../../utils/common';
@@ -26,6 +27,14 @@ export const CONFIG_PARAMS = {
     VIEW_MODE: 'VIEW_MODE',
     TABLE_LOADING: 'TABLE_LOADING',
     SWITCH_FETCHING_STATE: 'SWITCH_FETCHING_STATE'
+};
+
+const getCSRFHeader = function() {
+    var myHeaders = new Headers();
+    const token = $('input#csrf_token').val();
+    // myHeaders.append('X-CSRF-TOKEN', token);
+    myHeaders.append('X-CSRFToken', token);
+    return myHeaders;
 };
 
 const handler = (response, dispatch) => {
@@ -214,7 +223,6 @@ export function setupImportParams(paramData) {
     }
 }
 
-
 // fetch if the imported file has duplicated dashboard
 export function fetchBeforeImport(callback) {
     return (dispatch, getState) => {
@@ -222,18 +230,33 @@ export function fetchBeforeImport(callback) {
         const importParams = getState().importParams;
         const binaryFile = importParams.binaryFile;
         const url = window.location.origin + "/dashboard/before_import/";
+        
+        // can not handle file upload without plugin of jq
+/*      initJQueryAjax();
+        $.ajax({
+            type: "POST",
+            //dataType:'json',
+            url: url,
+            data: {
+                file: binaryFile
+            }
+        }).done(function(res) {
+            callbackHandler(response, callback);
+        }); */
 
         return fetch(url, {
             credentials: 'include',
             method: "POST",
             body: binaryFile,
-            cache: 'no-store'
+            cache: 'no-store',
+
+            // mode: "cors" // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+            headers: getCSRFHeader()
         }).then(always).then(json).then(
             response => {
                 callbackHandler(response, callback);
             }
         );
-
     }
 }
 
@@ -283,7 +306,9 @@ export function fetchDashboardImport(callback) {
         return fetch(url, {
             credentials: 'include',
             method: 'POST',
-            body: binaryFile
+            body: binaryFile,
+
+            headers: getCSRFHeader()
         }).then(always).then(json).then(
             response => {
                 callbackHandler(response, callback);

@@ -11,6 +11,7 @@ import TableContainer from './dashboardList/containers/TableContainer';
 import GraphContainer from './dashboardList/containers/GraphContainer';
 import configureStore from './dashboardList/store/configureStore';
 import { replaceAppName } from './utils/utils.jsx';
+import { initJQueryAjax } from './modules/utils';
 
 const $ = window.$ = require('jquery');
 const jQuery = window.jQuery = require('jquery'); // eslint-disable-line
@@ -20,6 +21,7 @@ const store = configureStore();
 // $('.nav > li:nth-child(2)').addClass('active');
 
 replaceAppName();
+initJQueryAjax();
 $(document).ready(() => {
     render(
         <Provider store={store}>

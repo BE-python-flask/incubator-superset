@@ -195,7 +195,8 @@ function tableVis(slice, payload) {
   if (sortBy) {
     datatable.column(data.columns.indexOf(sortBy)).order(fd.order_desc ? 'desc' : 'asc');
   }
-  if (sortBy && metrics.indexOf(sortBy) < 0) {
+
+  if ( sortBy && (typeof sortBy != 'object') && metrics.indexOf(sortBy) < 0) {
     // Hiding the sortBy column if not in the metrics list
     datatable.column(data.columns.indexOf(sortBy)).visible(false);
   }
