@@ -1741,7 +1741,7 @@ class Superset(BaseSupersetView, PermissionManagement):
                 .first()
         )
         if not table:
-            table = Dataset(table_name=table_name)
+            table = Dataset(dataset_name=table_name, table_name=table_name)
         table.database_id = data.get('dbId')
         table.schema = data.get('schema')
         table.template_params = data.get('templateParams')
@@ -1749,19 +1749,18 @@ class Superset(BaseSupersetView, PermissionManagement):
         q = SupersetQuery(data.get('sql'))
         table.sql = q.stripped()
         db.session.add(table)
-        # TODO
-        # self.grant_owner_perms(table.guardian_datasource())
-        # Number.log_number(g.user.username, Dataset.model_type)
-        # Log.log_add(table, Dataset.model_type, g.user.id)
+
+        self.grant_owner_perms(table.guardian_datasource())
+        Number.log_number(g.user.username, Dataset.model_type)
+        Log.log_add(table, Dataset.model_type, g.user.id)
 
         cols = []
         dims = []
         metrics = []
         for column_name, config in data.get('columns').items():
             is_dim = config.get('is_dim', False)
-            SqlaTable = ConnectorRegistry.sources['table']
-            TableColumn = SqlaTable.column_class
-            SqlMetric = SqlaTable.metric_class
+            TableColumn = Dataset.column_class
+            SqlMetric = Dataset.metric_class
             col = TableColumn(
                 column_name=column_name,
                 filterable=is_dim,
