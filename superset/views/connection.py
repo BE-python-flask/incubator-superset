@@ -107,7 +107,8 @@ class PilotDatabaseView(PilotModelView, PermissionManagement):  # noqa
     model_type = model.model_type
     datamodel = SQLAInterface(models.Database)
     route_base = '/database'
-    list_columns = ['id', 'database_name', 'description', 'backend', 'changed_on']
+    list_columns = ['id', 'database_name', 'description', 'backend', 'changed_on',
+                    'allow_run_sync', 'allow_run_async',]
     show_columns = ['id', 'database_name', 'description', 'sqlalchemy_uri',
                     'args', 'backend',  'created_on', 'changed_on']
     add_columns = ['database_name', 'description', 'sqlalchemy_uri', 'args']

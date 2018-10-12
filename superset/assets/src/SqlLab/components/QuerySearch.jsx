@@ -124,9 +124,10 @@ class QuerySearch extends React.PureComponent {
     return options;
   }
   dbMutator(data) {
-    const options = data.result.map(db => ({ value: db.id, label: db.database_name }));
-    this.props.actions.setDatabases(data.result);
-    if (data.result.length === 0) {
+    const dt = data.data.data;
+    const options = dt.map(db => ({ value: db.id, label: db.database_name }));
+    this.props.actions.setDatabases(dt);
+    if (dt.length === 0) {
       this.props.actions.addAlert({
         bsStyle: 'danger',
         msg: t("It seems you don't have access to any database"),
@@ -165,9 +166,10 @@ class QuerySearch extends React.PureComponent {
             />
           </div>
           <div className="col-sm-2">
+            {/* dataEndpoint="/databaseasync/api/read?_flt_0_expose=1" */}
             <AsyncSelect
               onChange={this.onChange}
-              dataEndpoint="/databaseasync/api/read?_flt_0_expose=1"
+              dataEndpoint="/database/listdata/?page_size=1000"
               value={this.state.databaseId}
               mutator={this.dbMutator}
             />

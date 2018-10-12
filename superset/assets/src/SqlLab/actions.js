@@ -56,6 +56,13 @@ export function saveQuery(query) {
     type: 'POST',
     url,
     data: query,
+    beforeSend: function(xhr, settings) {
+      const csrftoken = document.querySelector('#csrf_token').nodeValue();
+      console.log(csrftoken);
+      if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+          xhr.setRequestHeader("X-CSRFToken", csrftoken)
+      }
+    },
     success: () => notify.success(t('Your query was saved')),
     error: () => notify.error(t('Your query could not be saved')),
     dataType: 'json',
